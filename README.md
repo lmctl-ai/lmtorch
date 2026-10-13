@@ -6,8 +6,9 @@ so each producing call needs a fresh path.
 
 ## Build and test
 
-From this repository, with the sibling `lmctl-ai/lmcpp` checkout under
-`~/repos`, build the native ARM64 test and runtime images:
+From this repository, with the sibling `lmctl-ai/lmcpp` checkout under the
+same repositories root (lmcpp API baseline d3e9f9f), build the native ARM64
+test and runtime images:
 
 ```sh
 docker build --platform linux/arm64 -f docker/Dockerfile --target test -t torchcli:test ~/repos
@@ -15,16 +16,17 @@ docker run --rm --network=none torchcli:test ctest --test-dir /build --output-on
 docker build --platform linux/arm64 -f docker/Dockerfile --target runtime -t torchcli:dev ~/repos
 ```
 
-The build uses the binary `torch==2.9.1+cpu` CPython 3.11 wheel and serial C++
-compilation. `docker/Dockerfile.dockerignore` restricts the repositories-root
+The build uses the binary `torch==2.9.1+cpu` CPython 3.11 wheel and at most two
+C++ compile jobs. `docker/Dockerfile.dockerignore` restricts the repositories-root
 build context to lmcpp and this project.
 
 ## Use the host shim
 
 Put the repository's absolute `bin` directory on `PATH`, then invoke `torchcli`
-from a directory under `~/repos`. The shim starts a fresh offline container,
-mounts that workspace at the same absolute path, and forwards arguments to the
-C++ binary:
+from the artifact workspace. The shim starts a fresh offline container and
+mounts only the current directory read-write at the same absolute path. C++
+artifact reads and writes reject paths whose canonical target escapes that
+directory:
 
 ```sh
 export PATH="$PWD/bin:$PATH"

@@ -2,24 +2,21 @@
 set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(dirname -- "$script_dir")
-repos_dir=$(dirname -- "$(dirname -- "$project_dir")")
-case "$PWD/" in
-  "$repos_dir/"*) ;;
-  *) echo "torchcli: current directory must be under $repos_dir" >&2; exit 2 ;;
-esac
 uid=$(id -u)
 gid=$(id -g)
 out=$(mktemp)
 err=$(mktemp)
+trap 'rm -f "$out" "$err"' EXIT HUP INT TERM
 set +e
-docker run --rm --network=none --cpus=2 --memory=5g -u "$uid:$gid" -e TORCHCLI_READONLY -e TORCHCLI_DRYRUN -v "$repos_dir:$repos_dir" -w "$PWD" torchcli:dev "$@" >"$out" 2>"$err"
+docker run --rm --network=none --cpus=2 --memory=5g -u "$uid:$gid" -e TORCHCLI_READONLY -e TORCHCLI_DRYRUN -v "$PWD:$PWD" -w "$PWD" torchcli:dev "$@" >"$out" 2>"$err"
 rc=$?
 set -e
 if [ -s "$out" ]; then cat "$out"; fi
 if [ -s "$err" ]; then cat "$err" >&2; fi
-if [ ! -s "$out" ] && [ "$rc" -ne 0 ]; then
+if [ "$rc" -eq 125 ] && grep -Eiq '(^docker:|Error response from daemon|Cannot connect to the Docker daemon|Unable to find image|pull access denied|error during connect)' "$err"; then
   printf '{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"torchcli container failed to start","data":{"docker_exit":%s}}}\n' "$rc"
   rc=8
+elif [ ! -s "$out" ] && [ "$rc" -ne 0 ]; then
+  printf '{"success":false,"error":{"code":"TOOL_CRASH","message":"torchcli exited without a result","data":{"exit_code":%s}}}\n' "$rc"
 fi
-rm -f "$out" "$err"
 exit "$rc"
