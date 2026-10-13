@@ -58,3 +58,38 @@ lmscript examples/mlp-train.lms artifacts/recipe-mlp
 
 Recipe outputs and all tensor references must stay inside the mounted workspace.
 See [docs/parity.md](docs/parity.md) for implemented behavior and boundaries.
+
+## Train and report
+
+[`examples/train-report.lms`](examples/train-report.lms) combines torchcli training
+with lmcreator charts and a DOCX report. It generates a 16-point polynomial
+regression set in lmscript, initializes a seeded 2-8-1 MLP, trains for the
+requested steps, scores the training and held-out predictions, and writes loss
+and prediction charts plus a labeled pipeline diagram. The DOCX embeds both
+charts and the diagram.
+
+This cross-tool example expects the lmcreator checkout beside `cppwrapper`
+under the same repositories directory, and an aarch64 lmcreator-native helper
+cache. From this repository root:
+
+```sh
+REPO_ROOT="$(pwd -P)"
+CREATOR_BIN="$(cd ../../lmctlhq/lmcreator/bin && pwd -P)"
+export PATH="$REPO_ROOT/bin:$CREATOR_BIN:$PATH"
+export TMPDIR="$REPO_ROOT/artifacts/train-report-tmp"
+mkdir -p "$TMPDIR"
+export RESVG_BIN="$HOME/.cache/lmcreator-native-aarch64/resvg-embed"
+export PAGE_PROBE_BIN="$HOME/.cache/lmcreator-native-aarch64/page-probe"
+export PDF_WRITE_BIN="$HOME/.cache/lmcreator-native-aarch64/pdf-write"
+export PDF_READ_BIN="$HOME/.cache/lmcreator-native-aarch64/pdf-read"
+export FIELD_RENDER_BIN="$HOME/.cache/lmcreator-native-aarch64/field-render"
+lmscript --check examples/train-report.lms
+lmscript examples/train-report.lms artifacts/train-report 60 0.05 11
+```
+
+Arguments are `[run_dir, steps, lr, seed]`, defaulting to
+`artifacts/train-report`, `60`, `0.05`, and `11`. A representative 60-step run
+reported first/last loss `8.315850` / `0.078491`, training MSE `0.071583`, and
+R² `0.989220`. It writes `charts/{loss-vs-step,predicted-vs-target}.{png,svg}`
+and chart metadata, `diagram/training-pipeline.{png,svg}`, and
+`train-report.docx` with three embedded images (plus its Markdown source).
