@@ -5,6 +5,8 @@
 !lmctl-ai/lmcpp/src/**
 !lmctl-ai/lmcpp/examples/toy/**
 !cppwrapper/pytorch/CMakeLists.txt
+!cppwrapper/pytorch/requirements-torch.lock
+!cppwrapper/pytorch/requirements-test.lock
 !cppwrapper/pytorch/include/
 !cppwrapper/pytorch/include/**
 !cppwrapper/pytorch/src/

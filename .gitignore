@@ -2,4 +2,3 @@
 build/
 .tmp/
 artifacts/
-cli.schema.dev.json

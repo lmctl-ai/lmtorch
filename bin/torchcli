@@ -12,7 +12,7 @@ gid=$(id -g)
 out=$(mktemp)
 err=$(mktemp)
 set +e
-docker run --rm --network=none --cpus=2 --memory=5g -u "$uid:$gid" -v "$repos_dir:$repos_dir" -w "$PWD" torchcli:dev "$@" >"$out" 2>"$err"
+docker run --rm --network=none --cpus=2 --memory=5g -u "$uid:$gid" -e TORCHCLI_READONLY -e TORCHCLI_DRYRUN -v "$repos_dir:$repos_dir" -w "$PWD" torchcli:dev "$@" >"$out" 2>"$err"
 rc=$?
 set -e
 if [ -s "$out" ]; then cat "$out"; fi
