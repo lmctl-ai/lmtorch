@@ -24,9 +24,10 @@ build context to lmcpp and this project.
 
 Put the repository's absolute `bin` directory on `PATH`, then invoke `torchcli`
 from the artifact workspace. The shim starts a fresh offline container and
-mounts only the current directory read-write at the same absolute path. C++
-artifact reads and writes reject paths whose canonical target escapes that
-directory:
+mounts only the current directory read-write at the same absolute path using
+Docker's `--mount` form. It requires cwd to be a strict descendant of `$HOME`
+and refuses `/`, `$HOME`, and paths outside `$HOME`. C++ artifact reads and
+writes reject paths whose canonical target escapes cwd:
 
 ```sh
 export PATH="$PWD/bin:$PATH"

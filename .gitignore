@@ -1,4 +1,5 @@
 *.lmctl
+gemini.txt
 build/
 .tmp/
 artifacts/

@@ -4,19 +4,35 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(dirname -- "$script_dir")
 uid=$(id -u)
 gid=$(id -g)
+cwd=$(pwd -P)
+home=$(CDPATH= cd -- "${HOME:-/}" 2>/dev/null && pwd -P || printf /)
+case "$cwd" in
+  /|"$home") printf '{"success":false,"error":{"code":"INVALID_REQUEST","message":"torchcli requires a working directory below HOME","data":{}}}\n'; exit 2 ;;
+  "$home"/*) ;;
+  *) printf '{"success":false,"error":{"code":"INVALID_REQUEST","message":"torchcli requires a working directory below HOME","data":{}}}\n'; exit 2 ;;
+esac
 out=$(mktemp)
 err=$(mktemp)
-trap 'rm -f "$out" "$err"' EXIT HUP INT TERM
+cleanup() { [ -z "${out:-}" ] || rm -f "$out"; [ -z "${err:-}" ] || rm -f "$err"; }
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 set +e
-docker run --rm --network=none --cpus=2 --memory=5g -u "$uid:$gid" -e TORCHCLI_READONLY -e TORCHCLI_DRYRUN -v "$PWD:$PWD" -w "$PWD" torchcli:dev "$@" >"$out" 2>"$err"
+docker run --rm --network=none --cpus=2 --memory=5g -u "$uid:$gid" -e TORCHCLI_READONLY -e TORCHCLI_DRYRUN --mount "type=bind,src=$cwd,dst=$cwd" -w "$cwd" torchcli:dev "$@" >"$out" 2>"$err"
 rc=$?
 set -e
-if [ -s "$out" ]; then cat "$out"; fi
-if [ -s "$err" ]; then cat "$err" >&2; fi
-if [ "$rc" -eq 125 ] && grep -Eiq '(^docker:|Error response from daemon|Cannot connect to the Docker daemon|Unable to find image|pull access denied|error during connect)' "$err"; then
+if grep -Eiq '(^docker:|Error response from daemon|Cannot connect to the Docker daemon|Unable to find image|pull access denied|error during connect|docker: not found)' "$err"; then
+  if [ -s "$out" ]; then cat "$out"; fi
+  if [ -s "$err" ]; then cat "$err" >&2; fi
   printf '{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"torchcli container failed to start","data":{"docker_exit":%s}}}\n' "$rc"
   rc=8
-elif [ ! -s "$out" ] && [ "$rc" -ne 0 ]; then
-  printf '{"success":false,"error":{"code":"TOOL_CRASH","message":"torchcli exited without a result","data":{"exit_code":%s}}}\n' "$rc"
+elif { [ "$rc" -ge 128 ] || { [ ! -s "$out" ] && [ "$rc" -ne 0 ]; }; }; then
+  if [ -s "$err" ]; then cat "$err" >&2; fi
+  printf '{"success":false,"error":{"code":"INTERNAL_ERROR","message":"torchcli exited without a result","data":{"tool_code":"TOOL_CRASH","exit":%s}}}\n' "$rc"
+  rc=1
+else
+  if [ -s "$out" ]; then cat "$out"; fi
+  if [ -s "$err" ]; then cat "$err" >&2; fi
 fi
 exit "$rc"
