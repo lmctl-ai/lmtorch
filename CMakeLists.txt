@@ -20,5 +20,7 @@ set_target_properties(torchcli PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINAR
 enable_testing()
 add_executable(torchcli_unit tests/safetensors_test.cpp src/safetensors.cpp)
 target_include_directories(torchcli_unit PRIVATE include)
+target_compile_options(torchcli_unit PRIVATE -UNDEBUG)
 target_link_libraries(torchcli_unit PRIVATE lmcpp::core)
 add_test(NAME torchcli_integration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration.py $<TARGET_FILE:torchcli> $<TARGET_FILE:torchcli_unit> ${CMAKE_CURRENT_SOURCE_DIR}/tests/torch_oracle.py)
+add_test(NAME torchcli_shim COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/shim_test.py ${CMAKE_CURRENT_SOURCE_DIR}/bin/torchcli)

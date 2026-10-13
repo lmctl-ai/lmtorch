@@ -15,8 +15,9 @@ assert "not found" not in ldd.stdout, ldd.stdout
 assert not torch.cuda.is_available(), "CPU wheel unexpectedly reports CUDA"
 subprocess.run([unit], check=True)
 
+active_cwd=None
 def call(*args, env=None, ok=True):
-    p = subprocess.run([binary, *map(str, args)], text=True, capture_output=True, env=env)
+    p = subprocess.run([binary, *map(str, args)], text=True, capture_output=True, env=env, cwd=active_cwd)
     if ok and p.returncode != 0: raise AssertionError((args, p.returncode, p.stdout, p.stderr))
     return p
 
@@ -26,6 +27,7 @@ def approx(path, name, expected):
     assert torch.allclose(actual, expected, rtol=1e-5, atol=1e-6), (actual, expected)
 
 with tempfile.TemporaryDirectory(prefix="torchcli-test-") as d:
+    active_cwd=d
     paths = {name: os.path.join(d, name + ".safetensors") for name in (
         "a", "b", "mm", "sum", "soft", "linear", "lininput", "packed", "loaded", "grad",
         "rand1", "rand2", "randi64", "checkpoint", "fwd", "trained", "split1", "split2", "full1", "full2")}
@@ -118,4 +120,46 @@ with tempfile.TemporaryDirectory(prefix="torchcli-test-") as d:
     result("tensor_load","--path",paths["checkpoint"],"--out",reload_path)
     rerun=result("mlp_forward","--checkpoint",reload_path,"--input",xfile+"#tensor","--out",os.path.join(d,"reload_fwd.safetensors"))
     assert torch.allclose(load_file(os.path.join(d,"reload_fwd.safetensors"))["tensor"],load_file(paths["fwd"])["tensor"],rtol=0,atol=0)
+    # Regression vectors for Opus findings 10-20. These assertions were added
+    # before the fixes and intentionally fail against the prior implementation.
+    def rejected(code, *args):
+        p=call(*args,ok=False)
+        assert p.returncode==2, (args,p.returncode,p.stdout,p.stderr)
+        assert "Exception raised from" not in p.stderr and "backtrace" not in p.stdout.lower(), (p.stdout,p.stderr)
+        envelope=json.loads(p.stdout)
+        assert envelope["error"]["code"]==code, envelope
+        if args and args[0] in ("mlp_forward","mlp_train_step"):
+            assert envelope["error"]["data"].get("tool_code")=="INVALID_CHECKPOINT", envelope
+        return envelope
+    for badstep in ("-1", "7abc"):
+        badmodel=os.path.join(d,"bad-step-"+str(abs(hash(badstep)))+".safetensors")
+        save_file(model,badmodel,metadata={**metadata,"step":badstep})
+        rejected("VALIDATION_ERROR","mlp_train_step","--checkpoint",badmodel,"--input",xfile+"#tensor","--target",yfile+"#tensor","--lr",lr,"--out",os.path.join(d,"bad-step-out.safetensors"))
+        rejected("VALIDATION_ERROR","mlp_forward","--checkpoint",badmodel,"--input",xfile+"#tensor","--out",os.path.join(d,"bad-step-fwd.safetensors"))
+    malformed={"w1":model["w1"],"b1":torch.zeros(1),"w2":torch.zeros((3,4)),"b2":torch.zeros(1)}
+    badmodel=os.path.join(d,"bad-shape.safetensors");save_file(malformed,badmodel,metadata=metadata)
+    rejected("VALIDATION_ERROR","mlp_forward","--checkpoint",badmodel,"--input",xfile+"#tensor","--out",os.path.join(d,"bad-fwd.safetensors"))
+    rejected("VALIDATION_ERROR","mlp_train_step","--checkpoint",badmodel,"--input",xfile+"#tensor","--target",yfile+"#tensor","--lr",lr,"--out",os.path.join(d,"bad-train.safetensors"))
+    for tensors,name in (({**model,"w1":model["w1"].double()},"bad-dtype"),({**model,"w2":torch.zeros((3,4))},"bad-w2"),({**model,"b2":torch.zeros(2)},"bad-b2")):
+        path=os.path.join(d,name+".safetensors");save_file(tensors,path,metadata=metadata)
+        rejected("VALIDATION_ERROR","mlp_forward","--checkpoint",path,"--input",xfile+"#tensor","--out",os.path.join(d,name+"-out.safetensors"))
+    rejected("VALIDATION_ERROR","mlp_forward","--checkpoint",paths["checkpoint"],"--input",paths["randi64"]+"#tensor","--out",os.path.join(d,"bad-inputdtype.safetensors"))
+    ybad=os.path.join(d,"bad-target.safetensors");save_file({"tensor":torch.zeros((3,1))},ybad)
+    rejected("VALIDATION_ERROR","mlp_train_step","--checkpoint",paths["checkpoint"],"--input",xfile+"#tensor","--target",ybad+"#tensor","--lr",lr,"--out",os.path.join(d,"bad-batch.safetensors"))
+    for val,dtype in (("not-a-number","F32"),(1e100,"F32"),(1.5,"I64"),(9223372036854775808,"I64")):
+        rejected("VALIDATION_ERROR","tensor_create","--input-json",json.dumps({"shape":[1],"dtype":dtype,"values":[val],"out":os.path.join(d,"bad-value.safetensors")}))
+    exact_i64=os.path.join(d,"exact-i64.safetensors")
+    result("tensor_create","--input-json",'{"shape":[1],"dtype":"I64","values":[9007199254740993],"out":"'+exact_i64+'"}')
+    assert load_file(exact_i64)["tensor"].item()==9007199254740993
+    rejected("VALIDATION_ERROR","tensor_softmax","--input",paths["a"]+"#tensor","--dim",9223372036854775808,"--out",os.path.join(d,"bad-dim.safetensors"))
+    rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out","../torchcli-escape.safetensors")
+    with tempfile.TemporaryDirectory(prefix="torchcli-outside-") as outside:
+        os.symlink(outside,os.path.join(d,"escape"))
+        rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out",os.path.join(d,"escape","symlink-out.safetensors"))
+        external=os.path.join(outside,"external.safetensors");save_file({"tensor":torch.ones(1)},external)
+        rejected("VALIDATION_ERROR","tensor_inspect","--input",external+"#tensor")
+    nf=os.path.join(d,"nonfinite.safetensors");save_file({"tensor":torch.cat((torch.ones(32),torch.full((8,),float("nan"))))},nf)
+    nfresult=result("tensor_inspect","--input",nf+"#tensor","--limit",1)
+    assert nfresult["values"]==[1.0] and nfresult["nonfinite_count"]==8,nfresult
+    print("torchcli CLI regression cases: 21 passed (checkpoint shapes/metadata, values, softmax bounds, nonfinite count and path containment)")
     print("torchcli integration: all 12 operations, Torch numerical oracle, deterministic rand, checkpoint resume, readonly/dryrun, ldd and CPU-only passed")
