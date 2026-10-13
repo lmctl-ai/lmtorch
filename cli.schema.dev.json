@@ -1,0 +1,339 @@
+{
+  "schema": "cli.schema.v1",
+  "tool": "torchcli",
+  "version": "0.2.0",
+  "inputs": [
+    "flags",
+    "json"
+  ],
+  "globals": [],
+  "operations": [
+    {
+      "name": "tensor_create",
+      "access": "write",
+      "returns": "object",
+      "description": "Create a dense CPU tensor artifact",
+      "params": [
+        {
+          "name": "shape",
+          "type": "number",
+          "occurs": "+"
+        },
+        {
+          "name": "dtype",
+          "type": "string",
+          "occurs": "?",
+          "default": "F32",
+          "enum": [
+            "F32",
+            "F64",
+            "I64"
+          ]
+        },
+        {
+          "name": "fill",
+          "type": "number",
+          "occurs": "?"
+        },
+        {
+          "name": "values",
+          "type": "json",
+          "occurs": "?"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_rand",
+      "access": "write",
+      "returns": "object",
+      "description": "Create a seeded uniform tensor artifact",
+      "params": [
+        {
+          "name": "shape",
+          "type": "number",
+          "occurs": "+"
+        },
+        {
+          "name": "dtype",
+          "type": "string",
+          "occurs": "?",
+          "default": "F32",
+          "enum": [
+            "F32",
+            "F64",
+            "I64"
+          ]
+        },
+        {
+          "name": "distribution",
+          "type": "string",
+          "occurs": "?",
+          "default": "uniform",
+          "enum": [
+            "uniform"
+          ]
+        },
+        {
+          "name": "seed",
+          "type": "number",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_matmul",
+      "access": "write",
+      "returns": "object",
+      "description": "Multiply two rank-2 dense CPU tensors",
+      "params": [
+        {
+          "name": "a",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "b",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_add",
+      "access": "write",
+      "returns": "object",
+      "description": "Add equal-shaped tensors without broadcasting",
+      "params": [
+        {
+          "name": "a",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "b",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_softmax",
+      "access": "write",
+      "returns": "object",
+      "description": "Apply softmax along a checked dimension",
+      "params": [
+        {
+          "name": "input",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "dim",
+          "type": "number",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_linear",
+      "access": "write",
+      "returns": "object",
+      "description": "Apply X W-transpose plus optional bias",
+      "params": [
+        {
+          "name": "input",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "weight",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "bias",
+          "type": "string",
+          "occurs": "?"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_save",
+      "access": "write",
+      "returns": "object",
+      "description": "Pack named tensor references into one safetensors artifact",
+      "params": [
+        {
+          "name": "tensors",
+          "type": "object",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "metadata",
+          "type": "object",
+          "occurs": "?"
+        }
+      ]
+    },
+    {
+      "name": "tensor_load",
+      "access": "write",
+      "returns": "object",
+      "description": "Validate and reserialize safetensors into a new artifact",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "occurs": "?"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "tensor_inspect",
+      "access": "read",
+      "returns": "object",
+      "description": "Inspect tensor metadata and a bounded value preview",
+      "params": [
+        {
+          "name": "input",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "occurs": "?",
+          "default": 32
+        }
+      ]
+    },
+    {
+      "name": "autograd_grad",
+      "access": "write",
+      "returns": "object",
+      "description": "Rebuild sum-of-squares graph and persist its gradient",
+      "params": [
+        {
+          "name": "input",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "function",
+          "type": "string",
+          "occurs": "?",
+          "default": "sum_square",
+          "enum": [
+            "sum_square"
+          ]
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "mlp_forward",
+      "access": "write",
+      "returns": "object",
+      "description": "Run fixed two-layer ReLU MLP inference",
+      "params": [
+        {
+          "name": "checkpoint",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "input",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    },
+    {
+      "name": "mlp_train_step",
+      "access": "write",
+      "returns": "object",
+      "description": "Train one MLP step with MSE and plain SGD",
+      "params": [
+        {
+          "name": "checkpoint",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "input",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "occurs": "1"
+        },
+        {
+          "name": "lr",
+          "type": "number",
+          "occurs": "1"
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "occurs": "1"
+        }
+      ]
+    }
+  ]
+}
