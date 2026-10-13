@@ -39,6 +39,11 @@ torchcli tensor_matmul --a artifacts/run01/a.safetensors#tensor --b artifacts/ru
 torchcli tensor_inspect --input artifacts/run01/b.safetensors#tensor
 ```
 
+The shim maps recognized Docker daemon/image startup failures to
+`SERVICE_UNAVAILABLE`. A container crash or signal exit returns protocol
+`INTERNAL_ERROR` with exit 1 and `data.tool_code: "TOOL_CRASH"` plus the
+container exit status; raw signal statuses are not used as protocol exits.
+
 The schema publishes the twelve operations implemented in this stage. Recipe
 examples accept the run directory as their first argument:
 
