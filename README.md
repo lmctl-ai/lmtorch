@@ -1,24 +1,40 @@
 # torchcli
 
-`torchcli` is a small C++17 CPU tensor tool set using libtorch from the ARM64
-PyTorch wheel. Its artifact format is safetensors; output paths are exclusive,
+`torchcli` is a small C++17 CPU tensor tool set using libtorch from the CPU
+PyTorch wheel (aarch64 on the development host; the amd64 wheel is locked too). Its artifact format is safetensors; output paths are exclusive,
 so each producing call needs a fresh path.
 
 ## Build and test
 
 From this repository, with the sibling `lmctl-ai/lmcpp` checkout under the
-same repositories root (lmcpp API baseline d3e9f9f), build the native ARM64
-test and runtime images:
+same repositories root at revision `f6c6f51797912a369d6b27cf9e96f148a9a0e4d1`
+(`LMCPP_DIR` overrides the path; `scripts/build.sh` refuses another revision or
+a dirty checkout), build the test and runtime images for the host's
+architecture:
 
 ```sh
-docker build --platform linux/arm64 -f docker/Dockerfile --target test -t torchcli:test ~/repos
-docker run --rm --network=none torchcli:test ctest --test-dir /build --output-on-failure
-docker build --platform linux/arm64 -f docker/Dockerfile --target runtime -t torchcli:dev ~/repos
+scripts/build.sh test                                   # torchcli:test
+docker run --rm --pull=never --network=none torchcli:test   # ctest --test-dir /build --output-on-failure
+scripts/build.sh runtime                                # torchcli:dev, the image the host shim runs
 ```
 
-The build uses the binary `torch==2.9.1+cpu` CPython 3.11 wheel and at most two
-C++ compile jobs. `docker/Dockerfile.dockerignore` restricts the repositories-root
-build context to lmcpp and this project.
+`scripts/build.sh` stages a minimal context (lmcpp sources plus this project)
+and builds `docker/Dockerfile`, whose base is the multi-architecture index
+digest of `python:3.11-slim-bookworm` (its linux/arm64 manifest is the image
+every earlier build used); BuildKit picks the native platform. The wheel locks
+(`requirements-torch.lock`, `requirements-test.lock`) carry one hash per
+architecture (manylinux aarch64 and x86_64) for the binary `torch==2.9.1+cpu`
+CPython 3.11 wheel and the other platform wheels, so `pip --require-hashes`
+installs the native wheel on either architecture. At most two C++ compile jobs.
+
+Continuous integration (`.github/workflows/ci.yml`) repeats the two builds, the
+full test image, a secrets scan, the schema gate (`torchcli --schema` must equal
+`cli.schema.dev.json`), an lmts parse of the schema and every recipe through
+the host shim (`scripts/run-recipes.sh`; the lmcreator recipe is skipped
+without that checkout) on `ubuntu-24.04-arm` and `ubuntu-24.04`, and publishes
+nothing. A weekly workflow re-downloads every pinned wheel with its locked hash
+on both architectures and reports drift. torchcli was developed and measured on
+aarch64; AMD64_STATUS
 
 ## Use the host shim
 

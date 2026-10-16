@@ -1,0 +1,47 @@
+name: Weekly lock drift
+
+# Re-downloads every pinned wheel of requirements-torch.lock and requirements-test.lock on each architecture in the pinned base image
+# with pip's --require-hashes: a re-uploaded, yanked or renamed wheel fails the download and the job, and pip's message names it.
+# Nothing is updated or published automatically: a human regenerates the lock after reading the report.
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: wheel hashes (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+          - runner: ubuntu-24.04
+            arch: amd64
+    steps:
+      - name: Checkout torchcli
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Re-download the pinned wheels with --require-hashes in the pinned base image
+        run: |
+          base=$(sed -n 's/^ARG BASE=\(.*\)$/\1/p' docker/Dockerfile)
+          set +e
+          docker run --rm -v "$PWD:/src:ro" -w /src "$base" sh -c '
+            python -m pip download --no-cache-dir --no-deps --only-binary=:all: --require-hashes -r requirements-torch.lock -d /tmp/w --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple > /tmp/torch.log 2>&1; a=$?
+            python -m pip download --no-cache-dir --no-deps --only-binary=:all: --require-hashes -r requirements-test.lock -d /tmp/w > /tmp/test.log 2>&1; b=$?
+            tail -n 5 /tmp/torch.log; tail -n 5 /tmp/test.log; [ $a -eq 0 ] && [ $b -eq 0 ]' > drift.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "## ${{ matrix.arch }}: no wheel hash drift (every pinned wheel still downloads with its locked hash)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            { echo "## ${{ matrix.arch }}: WHEEL HASH DRIFT or missing wheel"; echo '```'; cat drift.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            cat drift.log
+            exit 1
+          fi

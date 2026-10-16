@@ -1,0 +1,118 @@
+name: CI
+
+# Builds the test and runtime images from the hash-locked wheels (one hash per architecture), runs the full test image (CTest), the
+# secrets and schema gates and every recipe through the host shim, on arm64 and on amd64. torchcli was developed and measured on
+# aarch64; the amd64 job is the only amd64 verification (README "Build and test"). Nothing here publishes an image or a package.
+# torchcli has no documentation or notices gate yet (pycli's pattern); those steps are absent, not skipped silently.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LMCPP_REF: f6c6f51797912a369d6b27cf9e96f148a9a0e4d1
+  LMTS_REF: 31012f638613b74114b66bce01c99b8415248263
+  LMCTL_VERSION: 0.2.207   # the lmscript used for the recipe acceptance on the development host
+
+jobs:
+  build-and-test:
+    name: images, tests, recipes (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+          - runner: ubuntu-24.04
+            arch: amd64
+    steps:
+      - name: Checkout torchcli (as cppwrapper/pytorch, the layout docker/Dockerfile expects)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: cppwrapper/pytorch
+      - name: Checkout pinned lmcpp
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: lmctl-ai/lmcpp
+          ref: ${{ env.LMCPP_REF }}
+          path: lmctl-ai/lmcpp
+      - name: Checkout pinned lmts
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: lmctl-ai/lmts
+          ref: ${{ env.LMTS_REF }}
+          path: lmts
+      - name: Host facts
+        run: |
+          uname -m; docker version --format '{{.Server.Version}} {{.Server.Arch}}'; python3 --version; df -h / | tail -1
+      - name: No secrets in tracked files
+        working-directory: cppwrapper/pytorch
+        run: python3 scripts/no-secrets.py
+      # Every gate after the test-image build runs even when an earlier gate failed (if: !cancelled() plus the outcome of the step it
+      # needs), so one run shows all results per architecture; a failed step still fails the job.
+      - name: Build the test image (libtorch 2.9.1+cpu from the ${{ matrix.arch }} wheel hash)
+        id: build_test
+        working-directory: cppwrapper/pytorch
+        run: LMCPP_DIR="$GITHUB_WORKSPACE/lmctl-ai/lmcpp" ./scripts/build.sh test
+      - name: Run the full test image (CTest)
+        id: ctest
+        if: ${{ !cancelled() && steps.build_test.outcome == 'success' }}
+        run: docker run --rm --pull=never --network=none torchcli:test
+      - name: Build the runtime image (torchcli:dev, the shim's image)
+        id: build_runtime
+        if: ${{ !cancelled() && steps.build_test.outcome == 'success' }}
+        working-directory: cppwrapper/pytorch
+        run: |
+          LMCPP_DIR="$GITHUB_WORKSPACE/lmctl-ai/lmcpp" ./scripts/build.sh runtime
+          docker builder prune -f > /dev/null; df -h / | tail -1
+      - name: Schema gate (runtime binary against the checked-in schema)
+        id: schema
+        if: ${{ !cancelled() && steps.build_runtime.outcome == 'success' }}
+        working-directory: cppwrapper/pytorch
+        run: |
+          docker run --rm --pull=never --network=none torchcli:dev --schema > published.json
+          python3 -c 'import json,sys; a=json.load(open("published.json")); b=json.load(open("cli.schema.dev.json")); sys.exit(0 if a==b else "cli.schema.dev.json is stale: regenerate with torchcli --schema")'
+      - name: Set up Bun
+        if: ${{ !cancelled() }}
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: 1.4.2
+      - name: Parse the published schema with lmts
+        if: ${{ !cancelled() }}
+        working-directory: lmts
+        run: |
+          bun -e 'import { readFileSync } from "node:fs"; import { parsePublishedSchema } from "./src/publish.ts"; const result = parsePublishedSchema(JSON.parse(readFileSync("../cppwrapper/pytorch/cli.schema.dev.json", "utf8"))); if (!result.ok) { console.error(result); process.exit(1); } console.log("lmts parsed torchcli schema");'
+      - name: Install lmscript (pinned @lmctl-ai/lmctl)
+        id: lmscript
+        if: ${{ !cancelled() && steps.build_runtime.outcome == 'success' }}
+        run: |
+          npm install -g "@lmctl-ai/lmctl@${LMCTL_VERSION}"
+          lmscript --version || true
+      - name: Run every recipe through the host shim (--check, --dry-run, real; the lmcreator recipe is skipped without that checkout)
+        id: recipes
+        if: ${{ !cancelled() && steps.lmscript.outcome == 'success' }}
+        working-directory: cppwrapper/pytorch
+        run: scripts/run-recipes.sh
+      - name: Image size report
+        if: ${{ !cancelled() && steps.build_test.outcome == 'success' }}
+        working-directory: cppwrapper/pytorch
+        run: |
+          images=torchcli:test; docker image inspect torchcli:dev > /dev/null 2>&1 && images="torchcli:dev torchcli:test"
+          { echo "## Image sizes (${{ matrix.arch }})"; python3 scripts/image-size-report.py $images; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Gate summary
+        if: ${{ !cancelled() }}
+        run: |
+          { echo "## Gates (${{ matrix.arch }})"; echo "| gate | outcome |"; echo "|---|---|";
+            echo "| test image build | ${{ steps.build_test.outcome }} |"; echo "| CTest | ${{ steps.ctest.outcome }} |";
+            echo "| runtime build | ${{ steps.build_runtime.outcome }} |"; echo "| schema | ${{ steps.schema.outcome }} |"; echo "| recipes | ${{ steps.recipes.outcome }} |"; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Clean builder cache and dangling images
+        if: always()
+        run: docker builder prune -f > /dev/null; docker image prune -f > /dev/null; df -h / | tail -1
