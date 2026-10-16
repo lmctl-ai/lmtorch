@@ -34,7 +34,14 @@ the host shim (`scripts/run-recipes.sh`; the lmcreator recipe is skipped
 without that checkout) on `ubuntu-24.04-arm` and `ubuntu-24.04`, and publishes
 nothing. A weekly workflow re-downloads every pinned wheel with its locked hash
 on both architectures and reports drift. torchcli was developed and measured on
-aarch64; amd64 is UNVERIFIED until the amd64 CI job is green (this sentence is updated from the run, never from local reasoning).
+aarch64; amd64 is verified by that CI job alone: GitHub Actions run 38927178576
+(commit 8847f37, 2026-10-16) passed every gate on `ubuntu-24.04` and
+`ubuntu-24.04-arm` (test image built from the x86_64 / aarch64 wheel hash,
+CTest 2/2, runtime build, schema gate, lmts parse, 9/9 recipe invocations with
+the lmcreator recipe skipped; amd64 images 975 MB / 1.14 GB, arm64 739 MB /
+898 MB on the runners' Docker). No amd64 timing is measured here, and bit
+equality across the two architectures is not claimed (the oracles use
+tolerances).
 
 ## Use the host shim
 
