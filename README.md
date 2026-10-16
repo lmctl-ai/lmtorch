@@ -34,7 +34,7 @@ the host shim (`scripts/run-recipes.sh`; the lmcreator recipe is skipped
 without that checkout) on `ubuntu-24.04-arm` and `ubuntu-24.04`, and publishes
 nothing. A weekly workflow re-downloads every pinned wheel with its locked hash
 on both architectures and reports drift. torchcli was developed and measured on
-aarch64; AMD64_STATUS
+aarch64; amd64 is UNVERIFIED until the amd64 CI job is green (this sentence is updated from the run, never from local reasoning).
 
 ## Use the host shim
 
