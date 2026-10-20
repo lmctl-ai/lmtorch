@@ -23,6 +23,7 @@ void contained(const std::string& name){std::error_code ec;auto root=std::filesy
   throw Error{ErrorCode::CommandFailed, std::move(message), {{"tool_code", code}}};
 }
 uint64_t element_size(const std::string& dtype) {
+  if (dtype=="BOOL") return 1;
   if (dtype=="F32") return 4;
   if (dtype=="F64" || dtype=="I64") return 8;
   bad("unsupported safetensors dtype: "+dtype, "UNSUPPORTED_DTYPE");
@@ -41,6 +42,7 @@ uint64_t little_u64(const uint8_t*p){uint64_t n=0;for(int i=7;i>=0;--i)n=(n<<8)|
 void put_u64(std::string&out,uint64_t n){for(int i=0;i<8;++i)out.push_back(static_cast<char>((n>>(i*8))&0xff));}
 void write_all(int fd,const char*p,size_t n){while(n){ssize_t w=::write(fd,p,n);if(w<0){if(errno==EINTR)continue;throw Error{ErrorCode::CommandFailed,"failed writing safetensors file",{{"tool_code","OUTPUT_WRITE_FAILED"}}};}p+=w;n-=static_cast<size_t>(w);}}
 }
+void check_contained(const std::string&path){contained(path);}
 TensorRef parse_ref(const std::string&ref){auto h=ref.find('#');if(h==std::string::npos||h==0||h+1==ref.size()||ref.find('#',h+1)!=std::string::npos)throw Error{ErrorCode::ValidationError,"tensor reference must be path#key",{{"tool_code","INVALID_TENSOR_REF"}}};return{ref.substr(0,h),ref.substr(h+1)};}
 TensorBundle read_bundle(const std::string&path){
   contained(path);
@@ -66,21 +68,21 @@ TensorBundle read_bundle(const std::string&path){
   }
   if(entries.empty()) bad("safetensors artifact has no tensors", "INVALID_HEADER");
   std::sort(entries.begin(),entries.end(),[](auto&a,auto&b){return a.begin<b.begin;});uint64_t cursor=0;
-  for(auto&e:entries){if(e.begin!=cursor)bad("safetensors offsets overlap or leave gaps", "INVALID_OFFSETS");cursor=e.end;TensorData tensor;tensor.dtype=e.dtype;tensor.shape=e.shape;auto begin=file.begin()+static_cast<std::ptrdiff_t>(e.begin);tensor.bytes.assign(begin,begin+static_cast<std::ptrdiff_t>(e.end-e.begin));result.tensors.emplace(e.name,std::move(tensor));}
+  for(auto&e:entries){if(e.begin!=cursor)bad("safetensors offsets overlap or leave gaps", "INVALID_OFFSETS");cursor=e.end;TensorData tensor;tensor.dtype=e.dtype;tensor.shape=e.shape;auto begin=file.begin()+static_cast<std::ptrdiff_t>(e.begin);tensor.bytes.assign(begin,begin+static_cast<std::ptrdiff_t>(e.end-e.begin));if(tensor.dtype=="BOOL")for(auto b:tensor.bytes)if(b>1)bad("BOOL tensor "+e.name+" holds a byte other than 0 or 1", "INVALID_ARTIFACT");result.tensors.emplace(e.name,std::move(tensor));}
   if(cursor!=data_size) bad("safetensors data section is not fully covered", "INVALID_OFFSETS");
   return result;
 }
 TensorData read_tensor(const TensorRef&ref){auto bundle=read_bundle(ref.path);auto it=bundle.tensors.find(ref.key);if(it==bundle.tensors.end())throw Error{ErrorCode::NotFound,"tensor key not found: "+ref.key,{{"tool_code","TENSOR_NOT_FOUND"}}};return it->second;}
-std::string write_bundle(const std::string&path,const TensorBundle&bundle){
+std::string write_bundle(const std::string&path,const TensorBundle&bundle,bool replace){
   contained(path);
   if(bundle.tensors.empty())bad("cannot write an empty safetensors artifact", "INVALID_TENSOR");
   Json hdr=Json::object();uint64_t offset=0;std::vector<uint8_t> payload;
   for(const auto&entry:bundle.tensors){const auto&t=entry.second;if(entry.first.empty()||entry.first=="__metadata__")bad("invalid safetensors tensor key", "INVALID_TENSOR");uint64_t count=count_elements(t.shape),unit=element_size(t.dtype);if(count>kMaxArtifact/unit)bad("tensor exceeds artifact size limit", "OUTPUT_TOO_LARGE");uint64_t size=count*unit;if(size!=t.bytes.size()||offset>kMaxArtifact-size)bad("tensor bytes do not match dtype and shape", "INVALID_TENSOR");hdr[entry.first]={{"dtype",t.dtype},{"shape",t.shape},{"data_offsets",{offset,offset+size}}};payload.insert(payload.end(),t.bytes.begin(),t.bytes.end());offset+=size;}
   if(!bundle.metadata.empty()){hdr["__metadata__"]=Json::object();for(const auto&item:bundle.metadata)hdr["__metadata__"][item.first]=item.second;}
   std::string h=hdr.dump();size_t padded=(h.size()+7)&~size_t(7);h.resize(padded,' ');if(h.size()>kMaxHeader||h.size()+8+payload.size()>kMaxArtifact)bad("output artifact exceeds size limit", "OUTPUT_TOO_LARGE");
-  std::string tmp=path+".tmpXXXXXX";std::vector<char>name(tmp.begin(),tmp.end());name.push_back('\0');int fd=::mkstemp(name.data());if(fd<0)throw Error{ErrorCode::CommandFailed,"cannot create output temporary file",{{"tool_code","OUTPUT_WRITE_FAILED"}}};std::string tempfile(name.data());
-  try{std::string prefix;put_u64(prefix,h.size());write_all(fd,prefix.data(),prefix.size());write_all(fd,h.data(),h.size());if(!payload.empty())write_all(fd,reinterpret_cast<const char*>(payload.data()),payload.size());mode_t mask=::umask(0);::umask(mask);if(::fchmod(fd,0644&~mask)!=0||::fsync(fd)!=0)throw std::runtime_error("failed to flush artifact");if(::close(fd)!=0){fd=-1;throw std::runtime_error("close failed");}fd=-1;if(::link(tempfile.c_str(),path.c_str())!=0){if(errno==EEXIST)throw Error{ErrorCode::Conflict,"output already exists: "+path,{{"path",path}}};throw Error{ErrorCode::CommandFailed,"cannot install output artifact: "+path,{{"tool_code","OUTPUT_WRITE_FAILED"}}};}auto parent=std::filesystem::path(path).parent_path();if(parent.empty())parent=".";int dirfd=::open(parent.c_str(),O_RDONLY|O_DIRECTORY);if(dirfd<0||::fsync(dirfd)!=0){if(dirfd>=0)::close(dirfd);::unlink(path.c_str());throw Error{ErrorCode::CommandFailed,"cannot sync artifact directory",{{"tool_code","OUTPUT_WRITE_FAILED"}}};}::close(dirfd);::unlink(tempfile.c_str());}catch(...){if(fd>=0)::close(fd);::unlink(tempfile.c_str());throw;}return path;
+  std::string tmp=path+".tmpXXXXXX";std::vector<char>name(tmp.begin(),tmp.end());name.push_back('\0');int fd=::mkstemp(name.data());if(fd<0)throw Error{ErrorCode::CommandFailed,"cannot create output temporary file for "+path+": "+std::strerror(errno),{{"tool_code","OUTPUT_WRITE_FAILED"}}};std::string tempfile(name.data());
+  try{std::string prefix;put_u64(prefix,h.size());write_all(fd,prefix.data(),prefix.size());write_all(fd,h.data(),h.size());if(!payload.empty())write_all(fd,reinterpret_cast<const char*>(payload.data()),payload.size());mode_t mask=::umask(0);::umask(mask);if(::fchmod(fd,0644&~mask)!=0||::fsync(fd)!=0)throw std::runtime_error("failed to flush artifact");if(::close(fd)!=0){fd=-1;throw std::runtime_error("close failed");}fd=-1;if(replace){if(::rename(tempfile.c_str(),path.c_str())!=0)throw Error{ErrorCode::CommandFailed,"cannot install output artifact: "+path,{{"tool_code","OUTPUT_WRITE_FAILED"}}};}else if(::link(tempfile.c_str(),path.c_str())!=0){if(errno==EEXIST)throw Error{ErrorCode::Conflict,"output already exists: "+path,{{"path",path}}};throw Error{ErrorCode::CommandFailed,"cannot install output artifact: "+path,{{"tool_code","OUTPUT_WRITE_FAILED"}}};}auto parent=std::filesystem::path(path).parent_path();if(parent.empty())parent=".";int dirfd=::open(parent.c_str(),O_RDONLY|O_DIRECTORY);if(dirfd<0||::fsync(dirfd)!=0){if(dirfd>=0)::close(dirfd);::unlink(path.c_str());throw Error{ErrorCode::CommandFailed,"cannot sync artifact directory",{{"tool_code","OUTPUT_WRITE_FAILED"}}};}::close(dirfd);::unlink(tempfile.c_str());}catch(...){if(fd>=0)::close(fd);::unlink(tempfile.c_str());throw;}return path;
 }
-std::string write_tensor(const std::string&path,const TensorData&t){TensorBundle b;b.tensors.emplace("tensor",t);return write_bundle(path,b);}
+std::string write_tensor(const std::string&path,const TensorData&t,bool replace){TensorBundle b;b.tensors.emplace("tensor",t);return write_bundle(path,b,replace);}
 lmcpp::Json descriptor(const TensorRef&ref,const TensorData&t){return{{"ref",ref.path+"#"+ref.key},{"path",ref.path},{"key",ref.key},{"dtype",t.dtype},{"shape",t.shape},{"nbytes",t.bytes.size()}};}
 }
