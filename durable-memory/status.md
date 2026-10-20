@@ -1,6 +1,8 @@
 # lmtorch status and hand-off (2026-10-20)
 
-Formerly `torchcli` in the private lmctlhq/torchcli. Renamed to lmtorch (binary, schemas, docs, env vars `LMTORCH_*`,
+Public at https://github.com/lmctl-ai/lmtorch since 2026-10-20: lmctlhq/torchcli (repo id 1417876046) was transferred and
+renamed with its full history after an owner-approved audit (no credentials or home paths; history keeps mentions of
+private repo/folder names such as lmctlhq/lmcreator, cppwrapper and m4g). Formerly `torchcli`. Renamed to lmtorch (binary, schemas, docs, env vars `LMTORCH_*`,
 cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmtorch. The safetensors metadata key
 `torchcli_format` is a file-format key and keeps its name so existing checkpoints stay readable.
 
@@ -28,9 +30,6 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   CSV byte-order marks, and several error messages).
 
 ## Pending
-- Move to public lmctl-ai/lmtorch: owner chose "transfer after audit" (2026-10-20). History audit findings are reported
-  to the owner; transfer of lmctlhq/torchcli and the visibility change happen only after the owner's explicit go. After
-  the transfer, update the git remote and README links (already written for lmctl-ai/lmtorch).
 - First CI run of the release form (cold libtorch build) and the first `v*` release.
 - No BLAS (portable GEMM; no linalg); macOS/Windows not attempted.
 
