@@ -1,7 +1,10 @@
 # lmtorch `_dsl_` API
 
 `schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5). `lmtorch --dsl-schema` prints this list grouped by
-type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs; `lmtorch --dsl-signatures` prints
+type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs, so a block can name the binary
+instead of a schema file: `prog = _dsl_ cli="lmtorch";` (lmscript R42, newer than the published 0.2.347) compiles against
+the installed binary's own schema, which can never drift from the binary that runs it. `lmtorch --cli-schema` prints the
+lmapi document (the same as lmapi's `--schema`); `lmtorch --dsl-signatures` prints
 the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatures schema/lmtorch.dsl.json`.
 
 A program is an lmscript `_dsl_` block compiled to bytecode and run by the native host:

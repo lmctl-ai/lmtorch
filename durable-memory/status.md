@@ -29,8 +29,13 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   uninitialized memory, uncaught lmcpp::Error aborting the process, BOOL payload bytes, grad mode leaking across files,
   CSV byte-order marks, and several error messages).
 
+- `_dsl_ cli="lmtorch"` (lmscript R42, lmctl-mono 0795e69f, 2026-10-20): the compiler takes the schema from
+  `lmtorch --dsl-schema --json`; lmtorch adds `--cli-schema`. Verified end to end with the mono lmscript (29 gates); the
+  published npm lmscript 0.2.347 predates it (28 gates, cli= skipped).
+
 ## Pending
 - First CI run of the release form (cold libtorch build) and the first `v*` release.
+- Switch the examples from `schema=` to `cli="lmtorch"` once an lmscript release contains R42.
 - No BLAS (portable GEMM; no linalg); macOS/Windows not attempted.
 
 ## Rules that apply

@@ -7,6 +7,10 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--ds
 
 ## Decisions (2026-10-20)
 
+- **Host flag standard (lmscript R42, 2026-10-20):** `--dsl-schema [--json]` (DSL schema), `--cli-schema [--json]` (lmapi
+  document; `--schema` stays as the lmapi protocol name), `--dsl-signatures`. lmscript's `_dsl_ cli="lmtorch"` runs
+  `lmtorch --dsl-schema --json` at compile time, so scripts need no schema file; examples keep `schema=` until an lmscript
+  release ships R42 (test.sh runs a cli= smoke test whenever the compiler supports it).
 - **One binary, two front ends.** `main.cpp` sends `--dsl`, `--dsl-schema`, `--dsl-signatures` to the DSL host; everything
   else is the unchanged lmcpp/lmapi CLI (`--schema` stays byte-identical to `cli.schema.dev.json`, the acceptance gate
   from status.md). The DSL schema flag is `--dsl-schema` because `--schema` already belongs to lmapi.

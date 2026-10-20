@@ -48,6 +48,17 @@ done < <("$BIN" --dsl-signatures)
 ok "--dsl-schema summary lists every member"
 "$BIN" --schema | cmp - cli.schema.dev.json || fail "lmapi --schema differs from cli.schema.dev.json"
 ok "lmapi --schema is byte-identical to cli.schema.dev.json"
+for flags in "--cli-schema" "--cli-schema --json"; do "$BIN" $flags | cmp - cli.schema.dev.json || fail "$flags differs from cli.schema.dev.json"; done
+ok "host flag standard: --cli-schema [--json] prints the lmapi document, --dsl-schema --json the DSL schema"
+# _dsl_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
+printf 'p = _dsl_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _dsl_\nsavedsl(p, "%s");\n' "$BIN" "$WORK/cli.dslb" > "$WORK/cli.lms"
+if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then
+  "$LMSCRIPT" "$WORK/cli.lms" >/dev/null || fail "compiling with cli=$BIN"
+  (cd "$WORK" && "$BIN" --dsl cli.dslb) | grep -q '"v":3.0' || fail "running a cli= compiled program"
+  ok "_dsl_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
+else
+  echo "# skipped: _dsl_ cli= (this lmscript predates lmscript R42)"
+fi
 
 # Release form: libtorch, libstdc++ and libgcc static; at most glibc's own libraries are shared (or nothing: fully static).
 needed="$(readelf -d "$BIN" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort | tr '\n' ' ')"
