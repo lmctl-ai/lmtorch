@@ -1,0 +1,247 @@
+# API semantics: one DSL program with an out.check per behavior; any failure exits 4 naming the check.
+# Usage: lmscript tests/dsl/api.lms OUT.dslb [work_dir]   then   torchcli --dsl OUT.dslb   (cwd must contain work_dir)
+OUT = ARGV.get(0, "build/api.dslb");
+WORK = ARGV.get(1, "dsl-api-work");
+api = _dsl_ schema="../../schema/torchcli.dsl.json";
+let work = ${WORK};
+fn near(a: float, b: float) -> bool { return abs(a - b) < 0.000001; }
+fn same(a: Tensor, b: string) -> bool { return a.to_json() == b; }
+
+# creation, shapes, dtypes
+out.check(torch.zeros(2, 3).shape() == "[2, 3]", "zeros shape");
+out.check(torch.ones(4).sum().item() == 4.0, "ones sum");
+out.check(torch.full(2, 2, 1.5).mean().item() == 1.5, "full");
+out.check(torch.zeros(1, 2, 3, 4).numel() == 24 && torch.zeros(1, 2, 3, 4).dim() == 4, "rank 4");
+out.check(torch.zeros(0).numel() == 0, "zero-size dimension");
+out.check(torch.arange(5).dtype() == DType.I64 && same(torch.arange(5), "[0, 1, 2, 3, 4]"), "arange int");
+out.check(same(torch.arange(0.0, 1.0, 0.25), "[0.0, 0.25, 0.5, 0.75]"), "arange float");
+out.check(same(torch.linspace(0.0, 1.0, 3), "[0.0, 0.5, 1.0]"), "linspace");
+out.check(same(torch.eye(2), "[[1.0, 0.0], [0.0, 1.0]]"), "eye");
+out.check(torch.scalar(2.5).dim() == 0 && torch.scalar(2.5).item() == 2.5, "scalar");
+out.check(torch.tensor("[[1, 2], [3, 4]]").dtype() == DType.I64, "integer literal is I64");
+out.check(torch.tensor("[1.5, 2]").dtype() == DType.F32, "float literal is F32");
+out.check(torch.tensor("[true, false]").dtype() == DType.BOOL, "bool literal");
+out.check(torch.tensor("[1, 2]", DType.F64).dtype() == DType.F64, "explicit dtype");
+out.check(torch.tensor("7").dim() == 0, "scalar literal");
+out.check(torch.tensor("[[]]").shape() == "[1, 0]", "empty inner list");
+out.check(torch.tensor("[0.1]", DType.F64).value(0) == 0.1, "F64 keeps precision");
+out.check(same(torch.tensor("[1.5, -2.25]").to(DType.I64), "[1, -2]"), "to I64 truncates");
+out.check(torch.tensor("[1, 0]").to(DType.BOOL).to_json() == "[true, false]", "to BOOL");
+
+# arithmetic and operators, including the reversed float forms
+let a = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]");
+out.check(same(a + a, "[[2.0, 4.0], [6.0, 8.0]]"), "+");
+out.check(same(a - 1.0, "[[0.0, 1.0], [2.0, 3.0]]"), "- float");
+out.check(same(10.0 - a, "[[9.0, 8.0], [7.0, 6.0]]"), "reversed -");
+out.check(same(2.0 * a, "[[2.0, 4.0], [6.0, 8.0]]"), "reversed *");
+out.check(same(1.0 + a, "[[2.0, 3.0], [4.0, 5.0]]"), "reversed +");
+out.check(same(-a, "[[-1.0, -2.0], [-3.0, -4.0]]"), "neg");
+out.check(same(a.div(2.0), "[[0.5, 1.0], [1.5, 2.0]]"), "div float");
+out.check(same(a.div(a), "[[1.0, 1.0], [1.0, 1.0]]"), "div tensor");
+out.check(same(a.pow(2.0), "[[1.0, 4.0], [9.0, 16.0]]"), "pow");
+out.check(same(a.matmul(a), "[[7.0, 10.0], [15.0, 22.0]]"), "matmul");
+out.check(same(a + torch.tensor("[10.0, 20.0]"), "[[11.0, 22.0], [13.0, 24.0]]"), "broadcasting add");
+out.check(same(a.maximum(torch.full(2, 2, 2.5)), "[[2.5, 2.5], [3.0, 4.0]]"), "maximum");
+out.check(same(a.minimum(torch.full(2, 2, 2.5)), "[[1.0, 2.0], [2.5, 2.5]]"), "minimum");
+out.check(same(a.clamp(1.5, 3.5), "[[1.5, 2.0], [3.0, 3.5]]"), "clamp");
+out.check(same(torch.tensor("[-1.5, 0.0, 2.0]").abs(), "[1.5, 0.0, 2.0]"), "abs");
+out.check(same(torch.tensor("[-1.5, 0.0, 2.0]").relu(), "[0.0, 0.0, 2.0]"), "relu");
+out.check(same(torch.tensor("[-1.5, 0.0, 2.0]").sign(), "[-1.0, 0.0, 1.0]"), "sign");
+out.check(same(torch.tensor("[-1.5, 0.5, 2.7]").floor(), "[-2.0, 0.0, 2.0]"), "floor");
+out.check(same(torch.tensor("[0.5, 1.5, 2.5]").round(), "[0.0, 2.0, 2.0]"), "round half to even");
+out.check(near(torch.scalar(0.0).sigmoid().item(), 0.5), "sigmoid");
+out.check(near(torch.scalar(1.0).exp().log().item(), 1.0), "exp/log");
+out.check(near(torch.scalar(4.0).sqrt().item(), 2.0) && near(torch.scalar(3.0).square().item(), 9.0), "sqrt/square");
+out.check(near(torch.scalar(0.0).tanh().item(), 0.0) && near(torch.scalar(0.0).cos().item(), 1.0) && near(torch.scalar(0.0).sin().item(), 0.0), "tanh/cos/sin");
+out.check(near(torch.scalar(-2.0).leaky_relu(0.1).item(), -0.2), "leaky_relu");
+out.check(near(torch.scalar(1.0).gelu().item(), 0.8413447), "gelu");
+let sm = torch.tensor("[[1.0, 2.0, 3.0]]").softmax(1);
+out.check(near(sm.sum().item(), 1.0) && sm.value(2) > sm.value(1), "softmax");
+out.check(near(torch.tensor("[[1.0, 2.0, 3.0]]").log_softmax(1).exp().sum().item(), 1.0), "log_softmax");
+
+# comparisons, predicates, where
+out.check(same(a.gt(2.0), "[[false, false], [true, true]]"), "gt float");
+out.check(same(a.lt(a + 1.0), "[[true, true], [true, true]]"), "lt tensor");
+out.check(same(a.ge(2.0), "[[false, true], [true, true]]") && same(a.le(2.0), "[[true, true], [false, false]]"), "ge/le");
+out.check(same(a.eq(3.0), "[[false, false], [true, false]]") && a.eq(a).all(), "eq");
+out.check(a.gt(3.5).any() && !a.gt(4.0).any(), "any");
+out.check(same(torch.where(a.gt(2.0), a, torch.zeros(2, 2)), "[[0.0, 0.0], [3.0, 4.0]]"), "where");
+out.check(a.allclose(a + 0.0000001, 0.0, 0.000001) && !a.allclose(a + 0.1, 0.0, 0.000001), "allclose");
+out.check(!a.allclose(torch.ones(4), 1.0, 1.0), "allclose with a different shape is false");
+out.check(a.equal(a.clone()) && !a.equal(a.to(DType.F64)), "equal compares dtype");
+out.check(a.is_finite() && !torch.tensor("[1.0]").div(0.0).is_finite(), "is_finite");
+
+# reductions
+out.check(a.sum().item() == 10.0 && a.mean().item() == 2.5, "sum/mean");
+out.check(same(a.sum(0), "[4.0, 6.0]") && same(a.sum(1, true), "[[3.0], [7.0]]"), "sum dim");
+out.check(same(a.mean(1), "[1.5, 3.5]") && a.mean(0, true).shape() == "[1, 2]", "mean dim");
+out.check(near(a.var().item(), 1.6666667) && near(a.std().item(), 1.2909944), "unbiased var/std");
+out.check(same(a.std(0, false), "[1.41421354, 1.41421354]"), "std dim");
+out.check(near(a.norm().item(), 5.4772256), "norm");
+out.check(a.max().item() == 4.0 && a.min().item() == 1.0, "max/min");
+out.check(same(a.amax(0), "[3.0, 4.0]") && same(a.amin(1), "[1.0, 3.0]"), "amax/amin");
+out.check(a.argmax().item_int() == 3 && same(a.argmax(1), "[1, 1]") && same(a.argmin(0), "[0, 0]"), "argmax/argmin");
+out.check(torch.tensor("[true, true, false]").sum().item_int() == 2, "bool sum is integer");
+
+# shapes and indexing
+out.check(a.reshape(4).shape() == "[4]" && a.reshape(-1, 1).shape() == "[4, 1]" && a.reshape(1, 1, 2, 2).dim() == 4, "reshape");
+out.check(a.flatten().shape() == "[4]" && same(a.t(), "[[1.0, 3.0], [2.0, 4.0]]"), "flatten/t");
+out.check(torch.zeros(2, 3, 4).transpose(0, 2).shape() == "[4, 3, 2]", "transpose");
+out.check(a.unsqueeze(0).shape() == "[1, 2, 2]" && a.unsqueeze(-1).shape() == "[2, 2, 1]", "unsqueeze");
+out.check(torch.zeros(1, 3, 1).squeeze().shape() == "[3]" && torch.zeros(1, 3, 1).squeeze(0).shape() == "[3, 1]", "squeeze");
+out.check(same(a.slice(1, 1, 2), "[[2.0], [4.0]]") && same(a.slice(0, 1, 100), "[[3.0, 4.0]]"), "slice clamps");
+out.check(same(a.select(0, -1), "[3.0, 4.0]"), "select negative");
+out.check(same(a.index_select(0, torch.tensor("[1, 0, 1]")), "[[3.0, 4.0], [1.0, 2.0], [3.0, 4.0]]"), "index_select");
+let parts = torch.list().add(a).add(a * 2.0);
+out.check(torch.cat(parts, 0).shape() == "[4, 2]" && torch.stack(parts, 0).shape() == "[2, 2, 2]", "cat/stack");
+let count = 0;
+for (t in parts) { count = count + t.numel(); }
+out.check(count == 8 && parts.len() == 2 && parts.at(1).value(0) == 2.0, "TensorList foreach");
+out.check(a.value(3) == 4.0 && torch.arange(3).value_int(2) == 2, "flat value");
+let m = torch.zeros(2, 2);
+out.check(m.set(3, 9.0).value(3) == 9.0 && m.sum().item() == 9.0, "set is in place and chains");
+
+# losses and functional layers
+let pred = torch.tensor("[[1.0], [2.0]]");
+let target = torch.tensor("[[0.0], [4.0]]");
+out.check(near(pred.mse_loss(target).item(), 2.5) && near(pred.l1_loss(target).item(), 1.5), "mse/l1");
+out.check(near(pred.smooth_l1_loss(target).item(), 1.0), "smooth_l1: (0.5 + 1.5) / 2");
+out.check(near(torch.tensor("[[0.0, 0.0]]").cross_entropy(torch.tensor("[1]")).item(), 0.6931472), "cross_entropy indices");
+out.check(near(torch.tensor("[[0.0, 0.0]]").log_softmax(1).nll_loss(torch.tensor("[0]")).item(), 0.6931472), "nll_loss");
+out.check(near(torch.tensor("[0.0]").bce_with_logits(torch.tensor("[1.0]")).item(), 0.6931472), "bce_with_logits");
+out.check(same(torch.tensor("[[1.0, 2.0]]").linear(torch.tensor("[[1.0, 1.0], [2.0, 0.0]]"), torch.tensor("[0.5, -1.0]")), "[[3.5, 1.0]]"), "linear");
+out.check(same(torch.tensor("[[1.0, 2.0]]").linear(torch.tensor("[[1.0, 1.0]]")), "[[3.0]]"), "linear without bias");
+
+# autograd
+let w = torch.tensor("[1.0, 2.0]").requires_grad(true);
+out.check(w.requires_grad() && !w.has_grad(), "leaf requires grad");
+let l = (w * w).sum() * 3.0;
+l.backward();
+out.check(same(w.grad(), "[6.0, 12.0]"), "grad of 3*sum(w^2)");
+let again = (w * 1.0).sum();
+again.backward();
+out.check(same(w.grad(), "[7.0, 13.0]"), "gradients accumulate");
+out.check(!w.zero_grad().has_grad(), "zero_grad clears");
+out.check(!w.detach().requires_grad() && !(w * 2.0).detach().requires_grad(), "detach");
+torch.grad_enabled(false);
+out.check(!(w * 2.0).requires_grad() && !torch.is_grad_enabled(), "grad disabled");
+torch.grad_enabled(true);
+out.check((w * 2.0).requires_grad(), "grad enabled again");
+
+# random numbers are reproducible under manual_seed
+torch.manual_seed(42);
+let r1 = torch.rand(3);
+torch.manual_seed(42);
+out.check(r1.equal(torch.rand(3)), "rand reproducible");
+torch.manual_seed(42);
+let n1 = torch.randn(2, 2);
+let i1 = torch.randint(0, 10, 5);
+let p1 = torch.randperm(6);
+torch.manual_seed(42);
+out.check(n1.equal(torch.randn(2, 2)) && i1.equal(torch.randint(0, 10, 5)) && p1.equal(torch.randperm(6)), "randn/randint/randperm reproducible");
+out.check(i1.min().item_int() >= 0 && i1.max().item_int() < 10 && p1.sum().item_int() == 15, "randint range, randperm is a permutation");
+let u = torch.rand(1000);
+out.check(u.min().item() >= 0.0 && u.max().item() < 1.0 && abs(u.mean().item() - 0.5) < 0.05, "rand is uniform [0, 1)");
+
+# models: layers, parameters, modes, save/load round trip
+torch.manual_seed(0);
+let model = torch.sequential().linear(3, 4).relu().linear(4, 2);
+out.check(model.layers() == 3 && model.num_parameters() == 3 * 4 + 4 + 4 * 2 + 2, "model size");
+out.check(model.summary() == "linear(3, 4) -> relu -> linear(4, 2)", "summary");
+out.check(model.parameters().len() == 4 && model.param("0.weight").shape() == "[4, 3]" && model.param("2.bias").shape() == "[2]", "parameter names follow nn.Sequential");
+let x = torch.randn(5, 3);
+let y1 = model.forward(x);
+out.check(y1.shape() == "[5, 2]", "forward shape");
+model.save(work + "/model.safetensors");
+let twin = torch.sequential().linear(3, 4).relu().linear(4, 2).load(work + "/model.safetensors");
+out.check(twin.forward(x).equal(y1), "Model.load restores weights");
+let rebuilt = torch.load_model(work + "/model.safetensors");
+out.check(rebuilt.summary() == model.summary() && rebuilt.forward(x).equal(y1), "torch.load_model rebuilds architecture and weights");
+let saved = torch.open(work + "/model.safetensors");
+out.check(saved.meta("torchcli_format") == "model-1" && saved.keys().len() == 4, "model file layout");
+let all_layers = torch.sequential().conv2d(1, 2, 3, 1, 1).relu().max_pool2d(2).flatten().layer_norm(8).gelu().dropout(0.5).linear(8, 3).leaky_relu(0.2).tanh().sigmoid().softmax(1);
+all_layers.eval();
+out.check(all_layers.forward(torch.randn(2, 1, 4, 4)).shape() == "[2, 3]", "every layer kind composes");
+all_layers.save(work + "/all-layers.safetensors");
+out.check(torch.load_model(work + "/all-layers.safetensors").summary() == all_layers.summary(), "every layer kind round-trips through load_model");
+let d = torch.sequential().dropout(0.5);
+out.check(d.eval().forward(torch.ones(100)).equal(torch.ones(100)), "dropout is identity in eval mode");
+out.check(!d.train().forward(torch.ones(1000)).equal(torch.ones(1000)), "dropout is active in train mode");
+let lm = torch.sequential().linear(3, 2);
+lm.forward(x).sum().backward();
+out.check(lm.param("0.weight").has_grad() && !lm.zero_grad().param("0.weight").has_grad(), "Model.zero_grad");
+
+# optimizers
+let p = torch.tensor("[5.0]").requires_grad(true);
+let sgd = torch.sgd(torch.list().add(p), 0.1);
+p.square().sum().backward();
+sgd.step();
+out.check(near(p.value(0), 4.0), "sgd step: 5 - 0.1 * 10");
+sgd.zero_grad();
+out.check(!p.has_grad() && near(sgd.set_lr(0.5).lr(), 0.5), "zero_grad and lr");
+let q = torch.tensor("[1.0]").requires_grad(true);
+let adam = torch.adam(torch.list().add(q), 0.1);
+q.sum().backward();
+adam.step();
+out.check(near(q.value(0), 0.9), "adam first step moves by lr");
+let mm = torch.sequential().linear(2, 1);
+out.check(torch.sgd(mm, 0.1, 0.9).lr() == 0.1 && torch.adam(mm, 0.01).lr() == 0.01 && torch.adamw(mm, 0.01, 0.1).lr() == 0.01, "optimizer constructors");
+
+# bundles, files and CSV
+let b = torch.bundle().put("a", a).put("i", torch.arange(3)).put("flag", torch.tensor("[true]")).meta("note", "hello");
+b.save(work + "/bundle.safetensors");
+let back = torch.open(work + "/bundle.safetensors");
+out.check(back.get("a").equal(a) && back.get("i").equal(torch.arange(3)) && back.get("flag").to_json() == "[true]", "bundle round trip keeps dtypes");
+out.check(back.meta("note") == "hello" && back.has_meta("note") && !back.has_meta("x") && back.has("a") && !back.has("z"), "bundle metadata");
+let names = "";
+for (k in back.keys()) { names = names + k + ","; }
+out.check(names == "a,flag,i,", "bundle keys sorted");
+a.save(work + "/a.safetensors");
+out.check(torch.load(work + "/a.safetensors").equal(a) && torch.load(work + "/bundle.safetensors", "i").equal(torch.arange(3)), "torch.load");
+torch.save(work + "/a.safetensors", a * 2.0);
+out.check(torch.load(work + "/a.safetensors").equal(a * 2.0), "saves replace existing files");
+a.write_csv(work + "/a.csv");
+out.check(torch.read_csv(work + "/a.csv", false).equal(a), "CSV round trip");
+torch.arange(3).write_csv(work + "/ints.csv");
+out.check(torch.read_csv(work + "/ints.csv", false).shape() == "[3, 1]", "1-D CSV is one column");
+out.write_text(work + "/note.txt", "line\n");
+
+# handle lifetime
+let before = torch.live_tensors();
+let mark = torch.mark();
+let keepme = torch.ones(3).keep();
+let temp = torch.ones(3);
+out.check(torch.release(mark) == 1 && torch.live_tensors() == before + 1, "release frees unkept handles only");
+out.check(keepme.sum().item() == 3.0, "kept handle survives release");
+
+# text forms and out
+out.check(torch.tensor("[1.5, 2.0]").to_text() == "[1.5, 2.0]", "to_text");
+out.check(torch.tensor("[1.0]").div(0.0).to_text() == "[inf]" && torch.tensor("[1.0]").div(0.0).to_json() == "[null]", "nonfinite text and JSON");
+out.set("float", 1.5).set("int", 7).set("string", "s").set("bool", true).set("tensor", a).set("nan", torch.scalar(0.0).div(0.0).item());
+out.append("series", 1).append("series", 2.5);
+out.check(torch.version() != "", "version");
+
+# second round (2026-10-20): edge cases around the fixes
+out.check(torch.tensor("[[1, 2], [3, 4]]").shape() == "[2, 2]" && torch.tensor("[[[1], [2]]]").shape() == "[1, 2, 1]", "rectangular nesting");
+out.check(torch.tensor("[]", DType.I64).dtype() == DType.I64 && torch.tensor("[[], []]").shape() == "[2, 0]", "empty literals");
+out.check(torch.zeros(2, 0).to_text() == "[[], []]" && torch.zeros(0).to_json() == "[]", "text of empty tensors");
+out.write_text(work + "/bom.csv", "﻿a,b\n1,2\n");
+out.check(torch.read_csv(work + "/bom.csv", true).equal(torch.tensor("[[1.0, 2.0]]")), "CSV byte-order mark is skipped");
+out.write_text(work + "/crlf.csv", "1,2\r\n3,4\r\n\r\n");
+out.check(torch.read_csv(work + "/crlf.csv", false).shape() == "[2, 2]", "CRLF lines and trailing blank lines");
+let base = torch.zeros(2, 3);
+base.slice(0, 1, 2).set(0, 7.0);
+out.check(base.value(3) == 7.0, "set through a contiguous row view writes the base");
+out.check(torch.tensor("[[1.0, 3.0]]").softmax(-1).value(1) > 0.5, "negative dimension");
+out.check(torch.zeros(1, 1, 1, 6).reshape(2, -1).shape() == "[2, 3]", "reshape infers -1");
+let pm = torch.sequential().linear(2, 2);
+pm.param("0.bias").set(1, 3.0);
+out.check(pm.param("0.bias").value(1) == 3.0, "Model.param is the live parameter");
+torch.sequential().linear(2, 3).leaky_relu(0.3).dropout(0.25).linear(3, 1).save(work + "/floats.safetensors");
+out.check(torch.load_model(work + "/floats.safetensors").summary() == "linear(2, 3) -> leaky_relu(0.29999999999999999) -> dropout(0.25) -> linear(3, 1)", "float layer arguments round-trip");
+let bools = torch.tensor("[true, false, true]");
+bools.save(work + "/bools.safetensors");
+out.check(torch.load(work + "/bools.safetensors").equal(bools) && bools.to(DType.F32).sum().item() == 2.0, "BOOL save/load and conversion");
+out.check(torch.randperm(0).numel() == 0 && torch.linspace(0.0, 1.0, 0).numel() == 0, "empty random/linspace");
+end _dsl_
+savedsl(api, OUT);

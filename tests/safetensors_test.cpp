@@ -23,5 +23,7 @@ int main(){try { chdir("/tmp");char tmp[]="/tmp/torchcli-roundtrip-XXXXXX";int f
   auto floatoff=artifact("torchcli-floatoff",R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0.0,4]}})","1234");assert(throws_tool([&]{read_tensor({floatoff,"tensor"});},"INVALID_HEADER"));std::filesystem::remove(floatoff);
   auto bigshape=artifact("torchcli-bigshape",R"({"tensor":{"dtype":"F32","shape":[9223372036854775808],"data_offsets":[0,4]}})","1234");assert(throws_tool([&]{read_tensor({bigshape,"tensor"});},"INVALID_HEADER"));std::filesystem::remove(bigshape);
   auto trailing=artifact("torchcli-trailing",R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}})","12345678");assert(throws_tool([&]{read_tensor({trailing,"tensor"});},"INVALID_OFFSETS"));std::filesystem::remove(trailing);
+  std::string boolbytes("\x00\x01\x02",3);auto badbool=artifact("torchcli-badbool",R"({"tensor":{"dtype":"BOOL","shape":[3],"data_offsets":[0,3]}})",boolbytes);assert(throws_tool([&]{read_tensor({badbool,"tensor"});},"INVALID_ARTIFACT"));std::filesystem::remove(badbool);
+  auto goodbool=artifact("torchcli-goodbool",R"({"tensor":{"dtype":"BOOL","shape":[2],"data_offsets":[0,2]}})",std::string("\x00\x01",2));assert(read_tensor({goodbool,"tensor"}).bytes==std::vector<uint8_t>({0,1}));std::filesystem::remove(goodbool);
   } catch (const lmcpp::Error& e) { fprintf(stderr, "lmcpp error: %s data=%s\n", e.message.c_str(), e.data.dump().c_str()); return 1; }
 }

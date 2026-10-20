@@ -10,8 +10,10 @@ from safetensors.torch import load_file, save_file
 binary, unit, oracle = sys.argv[1:]
 if not os.path.exists(binary): binary = binary.replace("/build-torchcli/", "/build/")
 if not os.path.exists(unit): unit = unit.replace("/build-torchcli/", "/build/")
-ldd = subprocess.run(["ldd", binary], text=True, capture_output=True, check=True)
+# A fully static binary makes ldd exit 1 with "not a dynamic executable"; a dynamic one must resolve every library.
+ldd = subprocess.run(["ldd", binary], text=True, capture_output=True)
 assert "not found" not in ldd.stdout, ldd.stdout
+assert ldd.returncode == 0 or "not a dynamic executable" in ldd.stdout + ldd.stderr, (ldd.stdout, ldd.stderr)
 assert not torch.cuda.is_available(), "CPU wheel unexpectedly reports CUDA"
 subprocess.run([unit], check=True)
 
