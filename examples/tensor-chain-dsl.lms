@@ -1,0 +1,24 @@
+# _dsl_ version of tensor-chain.lms: the same ones -> matmul -> add -> softmax chain, written as one DSL program that
+# runs inside one torchcli process (the lmapi version spawns four processes and writes four artifacts).
+# Run: lmscript examples/tensor-chain-dsl.lms [run_dir]      (torchcli on PATH, or TORCHCLI_BIN)
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/tensor-chain-dsl");
+mkdir(RUN, true);
+
+chain = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let a = torch.ones(2, 2);
+let b = a.matmul(a);
+# Tensor operators map to schema methods: + is add, * is mul, - is sub.
+let c = b + a;
+let d = c.softmax(1);
+d.save(run + "/d.safetensors");
+out.set("shape", d.shape()).set("values", d.flatten());
+out.check(d.allclose(torch.full(2, 2, 0.5), 0.0, 0.000001), "softmax of equal rows must be 0.5 everywhere");
+end _dsl_
+
+res = torchdsl.run_block(chain, path_join(RUN, "tensor-chain.dslb"));
+if (res != null) {
+  println(res.values);
+}

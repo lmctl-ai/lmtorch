@@ -1,10 +1,48 @@
 # torchcli
 
-`torchcli` is a small C++17 CPU tensor tool set using libtorch from the CPU
-PyTorch wheel (aarch64 on the development host; the amd64 wheel is locked too). Its artifact format is safetensors; output paths are exclusive,
-so each producing call needs a fresh path.
+`torchcli` is a small C++17 CPU tensor tool built on libtorch. One executable has two front ends:
 
-## Build and test
+- **lmapi operations** (`torchcli tensor_create ...`, `torchcli --schema`): twelve stateless operations over safetensors
+  artifacts, called from lmscript through the published schema `cli.schema.dev.json`. Output paths are exclusive, so each
+  producing call needs a fresh path.
+- **`_dsl_` programs** (`torchcli --dsl prog.dslb`): lmscript compiles a `_dsl_` block against
+  `schema/torchcli.dsl.json` into bytecode; torchcli loads it with the embedded cpp-dsl-sdk VM and runs it against libtorch
+  in one process: tensors, operators, autograd, `nn.Sequential` models, SGD/Adam, safetensors/CSV files.
+  API: [docs/dsl-api.md](docs/dsl-api.md); examples: [examples/README.md](examples/README.md).
+
+## Native build (no docker, no Python at run time)
+
+```sh
+scripts/build-libtorch.sh          # once: static CPU-only libtorch 2.9.1 from source into ~/.cache/torchcli (~1.5 h, 4 cores)
+scripts/build-native.sh            # build/bin/torchcli, fully static
+./test.sh                          # the native test suite
+```
+
+Requirements: GCC or Clang with C++17, CMake >= 3.22, Ninja, git, `nlohmann-json3-dev`, the lmcpp checkout containing
+revision `f6c6f51797912a369d6b27cf9e96f148a9a0e4d1` (`LMCPP_DIR`, default `../../lmctl-ai/lmcpp` or `../lmcpp`), and for the
+libtorch build only a Python 3 with `pyyaml` and `typing_extensions` (torchgen code generation; nothing Python is linked).
+Compiling `_dsl_` programs needs `lmscript` >= 0.2.346 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
+
+For development, `scripts/build-native.sh --dev` builds `build-dev/bin/torchcli` against a PyTorch wheel's shared libtorch
+(`TORCH_PYTHON`, default `~/.cache/torchcli/oracle-venv/bin/python`). `test.sh` tests whichever binary exists
+(`TORCHCLI_BIN` overrides; `TORCHCLI_REQUIRE_STATIC=1` refuses a dynamic one) and, when `ORACLE_PYTHON` (or that venv) has
+torch, safetensors and numpy, compares both front ends with Python PyTorch. Details and decisions:
+[durable-memory/native-build.md](durable-memory/native-build.md), [durable-memory/dsl-host.md](durable-memory/dsl-host.md).
+
+```sh
+export PATH="$PWD/build/bin:$PATH"
+torchcli --dsl-schema                       # the DSL API, grouped by type
+lmscript examples/classify-moons-dsl.lms    # a four-step train/evaluate/predict pipeline
+torchcli tensor_create --shape 2 --shape 2 --fill 1 --out artifacts/a.safetensors   # an lmapi operation
+```
+
+All artifact paths, in both front ends, must stay inside the working directory.
+
+## Legacy docker image (frozen oracle)
+
+The sections below describe the original docker build, kept as the frozen numerical oracle and in CI.
+
+### Build and test
 
 From this repository, with the sibling `lmctl-ai/lmcpp` checkout under the
 same repositories root at revision `f6c6f51797912a369d6b27cf9e96f148a9a0e4d1`
@@ -43,7 +81,7 @@ the lmcreator recipe skipped; amd64 images 975 MB / 1.14 GB, arm64 739 MB /
 equality across the two architectures is not claimed (the oracles use
 tolerances).
 
-## Use the host shim
+### Use the host shim
 
 Put the repository's absolute `bin` directory on `PATH`, then invoke `torchcli`
 from the artifact workspace. The shim starts a fresh offline container and
@@ -82,7 +120,7 @@ lmscript examples/mlp-train.lms artifacts/recipe-mlp
 Recipe outputs and all tensor references must stay inside the mounted workspace.
 See [docs/parity.md](docs/parity.md) for implemented behavior and boundaries.
 
-## Train and report
+### Train and report
 
 [`examples/train-report.lms`](examples/train-report.lms) combines torchcli training
 with lmcreator charts and a DOCX report. It generates a 16-point polynomial

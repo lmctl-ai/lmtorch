@@ -1,0 +1,34 @@
+# _dsl_ version of grad-check.lms: build sum(x^2) for x = [1, -2, 3], backpropagate, and check dx = 2x. The DSL version
+# also verifies the analytic gradient against central finite differences, which needs a loop the lmapi version lacks.
+# Run: lmscript examples/grad-check-dsl.lms [run_dir]
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/grad-check-dsl");
+mkdir(RUN, true);
+
+grad = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let x = torch.tensor("[1.0, -2.0, 3.0]", DType.F64).requires_grad(true);
+let loss = x.square().sum();
+loss.backward();
+let dx = x.grad();
+dx.save(run + "/dx.safetensors");
+out.check(dx.allclose(x.detach() * 2.0, 0.0, 0.0), "autograd gradient must equal 2x");
+
+# Central differences: (f(x + h e_i) - f(x - h e_i)) / 2h, one coordinate at a time.
+let h = 0.000001;
+let worst = 0.0;
+for (i in range(0, x.numel())) {
+  let up = x.detach().clone().set(i, x.value(i) + h);
+  let down = x.detach().clone().set(i, x.value(i) - h);
+  let numeric = (up.square().sum().item() - down.square().sum().item()) / (2.0 * h);
+  worst = max(worst, abs(numeric - dx.value(i)));
+}
+out.check(worst < 0.000001, "finite differences disagree with autograd");
+out.set("dx", dx).set("loss", loss.item()).set("max_fd_error", worst);
+end _dsl_
+
+res = torchdsl.run_block(grad, path_join(RUN, "grad-check.dslb"));
+if (res != null) {
+  println("dx:", res.dx, "loss:", res.loss, "finite-difference error below 1e-6:", res.max_fd_error < 0.000001);
+}

@@ -1,0 +1,92 @@
+# Multi-step task: train a small convolutional network to tell horizontal bars from vertical bars in noisy 8x8 images,
+# then classify images that lmscript "draws" as text.
+#   1 train     synthesize 512 labelled images inside the DSL (randint positions, Tensor.set pixels, randn noise),
+#               conv2d(1,4,3) -> relu -> max_pool2d(2) -> flatten -> linear(36,2), Adam, 25 epochs; held-out accuracy
+#   2 classify  lmscript turns ASCII art into a JSON image batch; the DSL reloads the model and labels each picture
+# Run: lmscript examples/cnn-bars-dsl.lms [run_dir]
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/cnn-bars-dsl");
+mkdir(RUN, true);
+
+train = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+torch.manual_seed(3);
+
+# One batch of n images: label 0 = horizontal bar at a random row, 1 = vertical bar at a random column, plus noise.
+fn bars(n: int, labels: Tensor) -> Tensor {
+  let images = torch.zeros(n, 1, 8, 8);
+  let where = torch.randint(0, 8, n);
+  for (i in range(0, n)) {
+    let at = where.value_int(i);
+    for (j in range(0, 8)) {
+      if (labels.value_int(i) == 0) {
+        images.set(i * 64 + at * 8 + j, 1.0);
+      } else {
+        images.set(i * 64 + j * 8 + at, 1.0);
+      }
+    }
+  }
+  return images + torch.randn(n, 1, 8, 8) * 0.3;
+}
+
+let y = torch.randint(0, 2, 512);
+let x = bars(512, y);
+let ty = torch.randint(0, 2, 128);
+let tx = bars(128, ty);
+let model = torch.sequential().conv2d(1, 4, 3).relu().max_pool2d(2).flatten().linear(36, 2);
+let opt = torch.adam(model, 0.02);
+for (epoch in range(0, 25)) {
+  let mark = torch.mark();
+  opt.zero_grad();
+  let loss = model.forward(x).cross_entropy(y);
+  loss.backward();
+  opt.step();
+  out.append("loss", loss.item());
+  torch.release(mark);
+}
+model.save(run + "/cnn.safetensors");
+model.eval();
+torch.grad_enabled(false);
+let acc = model.forward(tx).argmax(1).eq(ty).to(DType.F32).mean().item();
+out.set("test_accuracy", acc).set("architecture", model.summary()).set("parameters", model.num_parameters());
+out.check(acc > 0.95, "the CNN should separate bar orientations");
+end _dsl_
+
+res = torchdsl.run_block(train, path_join(RUN, "train.dslb"));
+if (res == null) { exit(0); }
+println(sprintf("1 train: %s, %d parameters, loss %.4f -> %.4f, held-out accuracy %.3f", res.architecture, res.parameters, res.loss[0], res.loss[len(res.loss) - 1], res.test_accuracy));
+
+PICTURES = [
+  ["........", "........", "........", "########", "........", "........", "........", "........"],
+  ["....#...", "....#...", "....#...", "....#...", "....#...", "....#...", "....#...", "....#..."],
+  ["........", "........", "........", "........", "........", "........", "#######.", "........"],
+  [".#......", ".#......", ".#......", ".#......", ".#......", ".#......", "........", "........"]
+];
+BATCH = [];
+for (pic in PICTURES) {
+  rows = [];
+  for (line in pic) {
+    row = [];
+    for (ch in line) { push(row, ch == "#" ? 1.0 : 0.0); }
+    push(rows, row);
+  }
+  push(BATCH, [rows]);
+}
+BATCH_JSON = json_stringify(BATCH);
+classify = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+torch.grad_enabled(false);
+let model = torch.load_model(run + "/cnn.safetensors").eval();
+let p = model.forward(torch.tensor(${BATCH_JSON}, DType.F32)).softmax(1);
+out.set("label", p.argmax(1)).set("confidence", p.amax(1));
+end _dsl_
+c = torchdsl.run_block(classify, path_join(RUN, "classify.dslb"));
+NAMES = ["horizontal", "vertical"];
+for (i = 0; i < len(PICTURES); i = i + 1) {
+  println(sprintf("2 classify picture %d: %-10s (p = %.3f)  first rows: %s %s %s", i + 1, NAMES[c.label[i]], c.confidence[i], PICTURES[i][0], PICTURES[i][1], PICTURES[i][2]));
+}
+EXPECTED = [0, 1, 0, 1];
+for (i = 0; i < len(EXPECTED); i = i + 1) {
+  if (c.label[i] != EXPECTED[i]) { println("a drawn picture was misclassified"); exit(1); }
+}

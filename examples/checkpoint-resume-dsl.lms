@@ -1,0 +1,91 @@
+# Multi-step task: interrupted training must resume exactly. Run A trains 40 steps without stopping; run B trains 20
+# steps, saves the model, and a second program (a later process in a real job) reloads it and trains 20 more. With plain
+# SGD the optimizer carries no state, so B's weights must equal A's; a third program compares the two checkpoints.
+# Also shows a single torchcli process running several bytecode files in order (B1 and B2 share nothing but files).
+# Run: lmscript examples/checkpoint-resume-dsl.lms [run_dir]
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/checkpoint-resume-dsl");
+mkdir(RUN, true);
+
+
+straight = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+torch.manual_seed(5);
+let x = torch.randn(64, 3);
+let y = x.matmul(torch.tensor("[[1.5], [-2.0], [0.5]]")) + 0.25;
+torch.bundle().put("x", x).put("y", y).save(run + "/data.safetensors");
+torch.manual_seed(6);
+let model = torch.sequential().linear(3, 8).relu().linear(8, 1);
+model.save(run + "/init.safetensors");
+let opt = torch.sgd(model, 0.05);
+for (step in range(0, 40)) {
+  opt.zero_grad();
+  let loss = model.forward(x).mse_loss(y);
+  loss.backward();
+  opt.step();
+  out.append("a_loss", loss.item());
+}
+model.save(run + "/a-40.safetensors");
+end _dsl_
+
+first_half = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let data = torch.open(run + "/data.safetensors");
+let model = torch.load_model(run + "/init.safetensors");
+let opt = torch.sgd(model, 0.05);
+for (step in range(0, 20)) {
+  opt.zero_grad();
+  let loss = model.forward(data.get("x")).mse_loss(data.get("y"));
+  loss.backward();
+  opt.step();
+  out.append("b_loss", loss.item());
+}
+model.save(run + "/b-20.safetensors");
+end _dsl_
+
+second_half = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let data = torch.open(run + "/data.safetensors");
+let model = torch.load_model(run + "/b-20.safetensors");
+let opt = torch.sgd(model, 0.05);
+for (step in range(0, 20)) {
+  opt.zero_grad();
+  let loss = model.forward(data.get("x")).mse_loss(data.get("y"));
+  loss.backward();
+  opt.step();
+  out.append("b_loss", loss.item());
+}
+model.save(run + "/b-40.safetensors");
+end _dsl_
+
+compare = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let a = torch.open(run + "/a-40.safetensors");
+let b = torch.open(run + "/b-40.safetensors");
+let keys = a.keys();
+let same = keys.len() == b.keys().len();
+for (k in keys) {
+  same = same && b.has(k) && a.get(k).equal(b.get(k));
+}
+out.set("identical", same);
+out.check(same, "resumed training diverged from uninterrupted training");
+end _dsl_
+
+paths = [];
+names = ["straight", "first-half", "second-half", "compare"];
+blocks = [straight, first_half, second_half, compare];
+for (i = 0; i < len(blocks); i = i + 1) {
+  p = path_join(RUN, names[i] + ".dslb");
+  savedsl(blocks[i], p);
+  push(paths, p);
+}
+# Run A, then B1 and B2 as separate processes (as an interrupted job would), then the comparison.
+a = torchdsl.run([paths[0]]);
+b1 = torchdsl.run([paths[1]]);
+b2 = torchdsl.run([paths[2]]);
+cmp = torchdsl.run([paths[3]]);
+if (a == null) { exit(0); }
+println(sprintf("A  uninterrupted: loss %.6f -> %.6f over 40 steps", a.a_loss[0], a.a_loss[39]));
+println(sprintf("B  resumed:       loss %.6f -> %.6f (20 steps, save, reload, 20 steps)", b1.b_loss[0], b2.b_loss[19]));
+println("checkpoints bit-identical:", cmp.identical);

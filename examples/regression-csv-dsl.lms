@@ -1,0 +1,73 @@
+# Multi-step task: fit a linear price model from a CSV file and hand the predictions back as CSV.
+#   1 lmscript  writes houses.csv (size, rooms, age -> price) from a known formula plus deterministic noise
+#   2 fit       the DSL reads the CSV, standardizes the features, fits weights and bias with Adam on hand-made
+#               parameters (torch.list + requires_grad), converts them back to original units, writes predictions.csv
+#   3 lmscript  reads predictions.csv with csv_parse, summarizes residuals and compares the coefficients to the truth
+# Run: lmscript examples/regression-csv-dsl.lms [run_dir]
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/regression-csv-dsl");
+mkdir(RUN, true);
+TRUE_W = [3.0, 20.0, -1.5];
+TRUE_B = 50.0;
+rows = ["size,rooms,age,price"];
+for (i = 0; i < 200; i = i + 1) {
+  size = 40 + (i * 37) % 160;
+  rooms = 1 + (i * 7) % 5;
+  age = (i * 13) % 60;
+  noise = (i * 7919) % 17 - 8;
+  price = TRUE_B + TRUE_W[0] * size + TRUE_W[1] * rooms + TRUE_W[2] * age + noise;
+  push(rows, f"{size},{rooms},{age},{round(price * 100) / 100}");
+}
+CSV = path_join(RUN, "houses.csv");
+write_file(CSV, join(rows, "\n") + "\n");
+println(f"1 data: {len(rows) - 1} rows -> {CSV}");
+
+fit = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let table = torch.read_csv(${CSV}, true);
+let x = table.slice(1, 0, 3);
+let y = table.slice(1, 3, 4);
+let mean = x.mean(0, true);
+let std = x.std(0, true);
+let xs = (x - mean).div(std);
+torch.manual_seed(0);
+let w = torch.zeros(3, 1).requires_grad(true);
+# Starting the bias at the mean price lets Adam spend its steps on the weights.
+let b = y.mean().reshape(1).clone().requires_grad(true);
+let opt = torch.adam(torch.list().add(w).add(b), 0.5);
+let loss = 0.0;
+for (step in range(0, 800)) {
+  let mark = torch.mark();
+  opt.zero_grad();
+  let l = (xs.matmul(w) + b).mse_loss(y);
+  l.backward();
+  opt.step();
+  loss = l.item();
+  torch.release(mark);
+}
+torch.grad_enabled(false);
+let pred = xs.matmul(w) + b;
+torch.cat(torch.list().add(y).add(pred), 1).write_csv(run + "/predictions.csv");
+# Undo the standardization: price = sum(w_i / std_i * x_i) + b - sum(w_i * mean_i / std_i).
+let w_units = w.t().div(std);
+out.set("weights", w_units.flatten()).set("bias", (b - (w_units * mean).sum()).item()).set("train_mse", loss);
+end _dsl_
+
+res = torchdsl.run_block(fit, path_join(RUN, "fit.dslb"));
+if (res == null) { exit(0); }
+println(sprintf("2 fit: price = %.3f*size + %.3f*rooms + %.3f*age + %.3f  (train MSE %.3f)", res.weights[0], res.weights[1], res.weights[2], res.bias, res.train_mse));
+
+preds = csv_parse("price,predicted\n" + read_file(path_join(RUN, "predictions.csv")));
+worst = 0;
+total = 0;
+for (row in preds) {
+  r = num(row.price) - num(row.predicted);
+  total = total + abs(r);
+  worst = max(worst, abs(r));
+}
+println(sprintf("3 residuals: mean |error| %.3f, worst %.3f over %d rows", total / len(preds), worst, len(preds)));
+for (i = 0; i < 3; i = i + 1) {
+  if (abs(res.weights[i] - TRUE_W[i]) > 0.25) { println("coefficient", i, "is far from the truth:", res.weights[i], "vs", TRUE_W[i]); exit(1); }
+}
+println("coefficients within 0.25 of the generating formula", TRUE_W);

@@ -1,0 +1,68 @@
+# _dsl_ version of mlp-train.lms: the same 2-4-1 ReLU MLP, seeds 11..14, inputs, targets, 20 plain-SGD steps at lr 0.05
+# and checkpoint format (w1, b1, w2, b2 + metadata torchcli_format=1, arch=mlp_relu_v1, step). The lmapi version runs
+# 28 torchcli processes and writes 28 files; here the whole loop is one DSL program in one process. Afterwards the
+# lmapi operation mlp_forward (same executable, schema import) scores the DSL-written checkpoint: both paths agree.
+# Run: lmscript examples/mlp-train-dsl.lms [run_dir]        (torchcli on PATH: the schema import launches it by name)
+import "./lib/torchdsl.lms";
+import "../cli.schema.dev.json" as torchcli;
+
+RUN = ARGV.get(0, "artifacts/mlp-train-dsl");
+mkdir(RUN, true);
+
+train = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+# tensor_rand seeds a fresh generator per call; manual_seed + rand draws the same values.
+torch.manual_seed(11);
+let w1 = torch.rand(4, 2).requires_grad(true);
+torch.manual_seed(12);
+let b1 = torch.rand(4).requires_grad(true);
+torch.manual_seed(13);
+let w2 = torch.rand(1, 4).requires_grad(true);
+torch.manual_seed(14);
+let b2 = torch.rand(1).requires_grad(true);
+let params = torch.list().add(w1).add(b1).add(w2).add(b2);
+let opt = torch.sgd(params, 0.05);
+let x = torch.tensor("[[0, 0], [0, 1], [1, 0], [1, 1]]", DType.F32);
+let y = torch.tensor("[[0], [1], [1], [2]]", DType.F32);
+
+fn forward(input: Tensor, w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor) -> Tensor {
+  return input.linear(w1, b1).relu().linear(w2, b2);
+}
+
+let first = 0.0;
+let last = 0.0;
+for (step in range(1, 21)) {
+  opt.zero_grad();
+  let loss = forward(x, w1, b1, w2, b2).mse_loss(y);
+  loss.backward();
+  opt.step();
+  if (step == 1) { first = loss.item(); }
+  last = loss.item();
+  out.append("loss", last);
+}
+out.check(last < first, "training loss did not decrease");
+torch.bundle().put("w1", w1).put("b1", b1).put("w2", w2).put("b2", b2)
+  .meta("torchcli_format", "1").meta("arch", "mlp_relu_v1").meta("step", "20")
+  .save(run + "/checkpoint_20.safetensors");
+torch.save(run + "/x.safetensors", x);
+torch.grad_enabled(false);
+let prediction = forward(x, w1, b1, w2, b2);
+out.set("first", first).set("last", last).set("prediction", prediction.flatten());
+end _dsl_
+
+res = torchdsl.run_block(train, path_join(RUN, "mlp-train.dslb"));
+if (res != null) {
+  # Cross-check through the lmapi operation of the same binary.
+  fwd = torchcli.mlp_forward({checkpoint: path_join(RUN, "checkpoint_20.safetensors"), input: path_join(RUN, "x.safetensors#tensor"), out: path_join(RUN, sprintf("lmapi-prediction-%d.safetensors", now()))});
+  if (fwd.status == "error") { println(fwd.error.message); exit(1); }
+  if (fwd.status == "ok") {
+    seen = torchcli.tensor_inspect({input: fwd.result.ref, limit: 4});
+    if (seen.status == "error") { println(seen.error.message); exit(1); }
+    if (seen.status == "ok") {
+      for (i = 0; i < 4; i = i + 1) {
+        if (abs(seen.result.values[i] - res.prediction[i]) > 0.00001) { println("lmapi and DSL predictions differ"); exit(1); }
+      }
+    }
+  }
+  println(sprintf("loss first: %.6f last: %.6f", res.first, res.last), "prediction:", res.prediction);
+}

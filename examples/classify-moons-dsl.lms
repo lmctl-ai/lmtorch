@@ -1,0 +1,147 @@
+# Multi-step task: a two-moons classifier, from raw data to a decision map, in four DSL programs orchestrated by lmscript.
+#   1 prepare   generate the noisy two-moons set, shuffle, split 80/20, standardize with training statistics, save a bundle
+#   2 train     2-16-16-2 MLP, Adam, shuffled minibatches; save the model (architecture travels in its metadata)
+#   3 evaluate  reload the model with torch.load_model, score the held-out split, confusion counts
+#      lmscript: below the target accuracy, retrain with twice the epochs (at most three attempts)
+#   4 predict   classify a grid of points chosen by lmscript; lmscript draws the decision regions as text
+# Each step is a separate torchcli process that hands its results to the next through safetensors files in the run directory.
+# Run: lmscript examples/classify-moons-dsl.lms [run_dir] [seed]
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/classify-moons-dsl");
+SEED = num(ARGV.get(1, "7"));
+TARGET = 0.95;
+mkdir(RUN, true);
+
+prepare = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+torch.manual_seed(${SEED});
+let n = 200;
+let pi = 3.141592653589793;
+let ta = torch.rand(n) * pi;
+let tb = torch.rand(n) * pi;
+# Upper moon (cos t, sin t); lower moon (1 - cos t, 0.5 - sin t); Gaussian noise 0.15.
+let upper = torch.stack(torch.list().add(ta.cos()).add(ta.sin()), 1);
+let lower = torch.stack(torch.list().add(1.0 - tb.cos()).add(0.5 - tb.sin()), 1);
+let x = torch.cat(torch.list().add(upper).add(lower), 0) + torch.randn(2 * n, 2) * 0.15;
+let y = torch.cat(torch.list().add(torch.zeros(n)).add(torch.ones(n)), 0).to(DType.I64);
+let perm = torch.randperm(2 * n);
+x = x.index_select(0, perm);
+y = y.index_select(0, perm);
+let ntrain = 2 * n * 4 / 5;
+let xtr = x.slice(0, 0, ntrain);
+let mean = xtr.mean(0, true);
+let std = xtr.std(0, true);
+torch.bundle()
+  .put("x_train", (xtr - mean).div(std)).put("y_train", y.slice(0, 0, ntrain))
+  .put("x_test", (x.slice(0, ntrain, 2 * n) - mean).div(std)).put("y_test", y.slice(0, ntrain, 2 * n))
+  .put("mean", mean).put("std", std).meta("seed", str(${SEED}))
+  .save(run + "/data.safetensors");
+out.set("train", ntrain).set("test", 2 * n - ntrain).set("class_balance", y.to(DType.F32).mean().item());
+end _dsl_
+
+data = torchdsl.run_block(prepare, path_join(RUN, "prepare.dslb"));
+if (data == null) { exit(0); }
+println(f"1 prepare: {data.train} training and {data.test} held-out points, class balance {data.class_balance}");
+
+EPOCHS = 10;
+attempt = 0;
+best = null;
+while (attempt < 3) {
+  attempt = attempt + 1;
+  train = _dsl_ schema="../schema/torchcli.dsl.json";
+  let run = ${RUN};
+  let data = torch.open(run + "/data.safetensors");
+  let x = data.get("x_train");
+  let y = data.get("y_train");
+  torch.manual_seed(${SEED});
+  let model = torch.sequential().linear(2, 16).relu().linear(16, 16).relu().linear(16, 2);
+  let opt = torch.adam(model, 0.01);
+  let n = x.size(0);
+  let batch = 32;
+  for (epoch in range(0, ${EPOCHS})) {
+    let mark = torch.mark();
+    let perm = torch.randperm(n);
+    let total = 0.0;
+    let start = 0;
+    while (start < n) {
+      let idx = perm.slice(0, start, min(start + batch, n));
+      opt.zero_grad();
+      let loss = model.forward(x.index_select(0, idx)).cross_entropy(y.index_select(0, idx));
+      loss.backward();
+      opt.step();
+      total = total + loss.item() * float(idx.numel());
+      start = start + batch;
+    }
+    out.append("epoch_loss", total / float(n));
+    torch.release(mark);
+  }
+  model.save(run + "/model.safetensors");
+  model.eval();
+  torch.grad_enabled(false);
+  out.set("train_accuracy", model.forward(x).argmax(1).eq(y).to(DType.F32).mean().item());
+  out.set("parameters", model.num_parameters()).set("architecture", model.summary());
+end _dsl_
+
+  evaluate = _dsl_ schema="../schema/torchcli.dsl.json";
+  let run = ${RUN};
+  let model = torch.load_model(run + "/model.safetensors").eval();
+  torch.grad_enabled(false);
+  let data = torch.open(run + "/data.safetensors");
+  let y = data.get("y_test");
+  let pred = model.forward(data.get("x_test")).argmax(1);
+  let truth1 = y.eq(1.0).to(DType.F32);
+  let pred1 = pred.eq(1.0).to(DType.F32);
+  out.set("test_accuracy", pred.eq(y).to(DType.F32).mean().item());
+  out.set("true_pos", (truth1 * pred1).sum().item()).set("false_neg", (truth1 * (1.0 - pred1)).sum().item());
+  out.set("false_pos", ((1.0 - truth1) * pred1).sum().item()).set("true_neg", ((1.0 - truth1) * (1.0 - pred1)).sum().item());
+end _dsl_
+
+  savedsl(train, path_join(RUN, "train.dslb"));
+  savedsl(evaluate, path_join(RUN, "evaluate.dslb"));
+  # Steps 2 and 3 run as two files in one torchcli process: loaded and verified together, executed in order.
+  res = torchdsl.run([path_join(RUN, "train.dslb"), path_join(RUN, "evaluate.dslb")]);
+  println(sprintf("2 train (attempt %d, %d epochs): final epoch loss %.4f, train accuracy %.3f", attempt, EPOCHS, res.epoch_loss[len(res.epoch_loss) - 1], res.train_accuracy));
+  println(sprintf("3 evaluate: test accuracy %.3f (tp %d, fn %d, fp %d, tn %d)", res.test_accuracy, res.true_pos, res.false_neg, res.false_pos, res.true_neg));
+  best = res;
+  if (res.test_accuracy >= TARGET) { break; }
+  println(f"  below the {TARGET} target: retraining with {EPOCHS * 2} epochs");
+  EPOCHS = EPOCHS * 2;
+}
+if (best.test_accuracy < TARGET) {
+  println("target accuracy not reached after three attempts");
+  exit(1);
+}
+
+# Step 4: lmscript chooses the query points (a 41 x 13 grid over the data range) and draws the answer.
+COLS = 41;
+ROWS = 13;
+GRID = [];
+for (r = 0; r < ROWS; r = r + 1) {
+  for (c = 0; c < COLS; c = c + 1) {
+    push(GRID, [-1.5 + 4.0 * c / (COLS - 1), 1.5 - 2.5 * r / (ROWS - 1)]);
+  }
+}
+GRID_JSON = json_stringify(GRID);
+predict = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let model = torch.load_model(run + "/model.safetensors").eval();
+torch.grad_enabled(false);
+let data = torch.open(run + "/data.safetensors");
+let points = (torch.tensor(${GRID_JSON}, DType.F32) - data.get("mean")).div(data.get("std"));
+out.set("classes", model.forward(points).argmax(1));
+end _dsl_
+grid = torchdsl.run_block(predict, path_join(RUN, "predict.dslb"));
+println("4 predict: decision regions (o = upper moon, x = lower moon)");
+map = "";
+for (r = 0; r < ROWS; r = r + 1) {
+  row = "   ";
+  for (c = 0; c < COLS; c = c + 1) {
+    row = row + (grid.classes[r * COLS + c] == 0 ? "o" : "x");
+  }
+  println(row);
+  map = map + row + "\n";
+}
+write_file(path_join(RUN, "report.md"), sprintf("# Two-moons classifier\n\nArchitecture: `%s` (%d parameters)  \nEpochs: %d (attempt %d)  \nTest accuracy: %.3f  \nConfusion: tp %d, fn %d, fp %d, tn %d\n\n```\n%s```\n",
+  best.architecture, best.parameters, EPOCHS, attempt, best.test_accuracy, best.true_pos, best.false_neg, best.false_pos, best.true_neg, map));
+println("report:", path_join(RUN, "report.md"));

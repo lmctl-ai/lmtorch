@@ -1,0 +1,117 @@
+# _dsl_ version of train-report.lms: lmscript builds the 16-point dataset, ONE DSL program trains the seeded 2-8-1 MLP,
+# scores training and held-out points and computes the metrics with tensor ops, and lmscript writes a Markdown report
+# with a loss table and a text sparkline. The lmapi version makes 72 torchcli calls plus 5 lmcreator calls (charts, DOCX);
+# this one needs only torchcli (no Python, no GUI or rendering code).
+# Run: lmscript examples/train-report-dsl.lms [run_dir] [steps] [lr] [seed]    (defaults artifacts/train-report-dsl 60 0.05 11)
+import "./lib/torchdsl.lms";
+
+RUN = ARGV.get(0, "artifacts/train-report-dsl");
+STEPS = num(ARGV.get(1, "60"));
+LR = num(ARGV.get(2, "0.05"));
+SEED = num(ARGV.get(3, "11"));
+if (STEPS < 1 || floor(STEPS) != STEPS || LR <= 0 || floor(SEED) != SEED || SEED < 0) {
+  println("steps and seed must be nonnegative integers (steps > 0), and lr must be positive");
+  exit(1);
+}
+mkdir(RUN, true);
+
+# A deterministic 4x4 grid with a learnable bilinear target, and four held-out points.
+GRID = [-1.5, -0.5, 0.5, 1.5];
+X_VALUES = [];
+Y_VALUES = [];
+for (x1 in GRID) {
+  for (x2 in GRID) {
+    push(X_VALUES, [x1, x2]);
+    push(Y_VALUES, [x1 + 2 * x2 - 0.5 * x1 * x2]);
+  }
+}
+TEST_X = [[-1.25, 1.25], [-0.25, 0.75], [-0.25, -0.75], [1.25, 0.25]];
+TEST_Y = [];
+for (p in TEST_X) { push(TEST_Y, [p[0] + 2 * p[1] - 0.5 * p[0] * p[1]]); }
+# ${} turns lmscript values into DSL literals: lists travel as JSON text, and the rate as an integer number of millionths
+# (an integral lmscript number becomes a DSL int, so a float-valued parameter is passed scaled).
+X_JSON = json_stringify(X_VALUES);
+Y_JSON = json_stringify(Y_VALUES);
+TX_JSON = json_stringify(TEST_X);
+TY_JSON = json_stringify(TEST_Y);
+LR_MICRO = round(LR * 1000000);
+
+report = _dsl_ schema="../schema/torchcli.dsl.json";
+let run = ${RUN};
+let x = torch.tensor(${X_JSON}, DType.F32);
+let y = torch.tensor(${Y_JSON}, DType.F32);
+let tx = torch.tensor(${TX_JSON}, DType.F32);
+let ty = torch.tensor(${TY_JSON}, DType.F32);
+let seed = ${SEED};
+torch.manual_seed(seed);
+let w1 = torch.rand(8, 2).requires_grad(true);
+torch.manual_seed(seed + 1);
+let b1 = torch.rand(8).requires_grad(true);
+torch.manual_seed(seed + 2);
+let w2 = torch.rand(1, 8).requires_grad(true);
+torch.manual_seed(seed + 3);
+let b2 = torch.rand(1).requires_grad(true);
+let opt = torch.sgd(torch.list().add(w1).add(b1).add(w2).add(b2), float(${LR_MICRO}) / 1000000.0);
+
+fn forward(input: Tensor, w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor) -> Tensor {
+  return input.linear(w1, b1).relu().linear(w2, b2);
+}
+
+let steps = ${STEPS};
+let losses = torch.zeros(steps);
+for (step in range(0, steps)) {
+  # Release the handles each step creates, so a long run keeps memory flat.
+  let mark = torch.mark();
+  opt.zero_grad();
+  let loss = forward(x, w1, b1, w2, b2).mse_loss(y);
+  loss.backward();
+  opt.step();
+  losses.set(step, loss.item());
+  torch.release(mark);
+}
+losses.write_csv(run + "/losses.csv");
+torch.grad_enabled(false);
+let pred = forward(x, w1, b1, w2, b2);
+let held = forward(tx, w1, b1, w2, b2);
+let err = pred - y;
+let sse = err.square().sum().item();
+let sst = (y - y.mean()).square().sum().item();
+torch.bundle().put("w1", w1).put("b1", b1).put("w2", w2).put("b2", b2)
+  .meta("torchcli_format", "1").meta("arch", "mlp_relu_v1").meta("step", str(steps))
+  .save(run + "/checkpoint.safetensors");
+out.set("engine", torch.version()).set("losses", losses).set("first_loss", losses.value(0)).set("last_loss", losses.value(steps - 1))
+  .set("min_loss", losses.min().item()).set("train_mse", sse / float(y.numel()))
+  .set("max_abs_error", err.abs().max().item()).set("r2", 1.0 - sse / sst)
+  .set("heldout_pred", held.flatten()).set("heldout_mse", held.mse_loss(ty).item());
+end _dsl_
+
+res = torchdsl.run_block(report, path_join(RUN, "train-report.dslb"));
+if (res == null) { exit(0); }
+
+fn sparkline(values) {
+  bars = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+  lo = min(values);
+  hi = max(values);
+  s = "";
+  for (v in values) {
+    k = hi == lo ? 0 : floor((v - lo) / (hi - lo) * 7.999);
+    s = s + bars[k];
+  }
+  return s;
+}
+rows = "| step | loss |\n|---:|---:|\n";
+for (i = 0; i < STEPS; i = i + 1) {
+  if (i == 0 || (i + 1) % 10 == 0 || i == STEPS - 1) { rows = rows + sprintf("| %d | %.6f |\n", i + 1, res.losses[i]); }
+}
+heldout = [];
+for (v in res.heldout_pred) { push(heldout, sprintf("%.4f", v)); }
+targets = [];
+for (t in TEST_Y) { push(targets, sprintf("%.4f", t[0])); }
+md = sprintf("# Mini-model training report\n\nRun: `%s`  \nSteps: %d  \nLearning rate: %.4f  \nSeed: %d  \nEngine: %s, one `torchcli --dsl` process\n\n## Metrics\n\n- First step loss: %.6f\n- Last step loss: %.6f\n- Minimum step loss: %.6f\n- Final training MSE: %.6f\n- Maximum absolute training error: %.6f\n- Training R-squared: %.6f\n- Held-out MSE: %.6f\n- Held-out predictions: %s\n- Held-out targets: %s\n\n## Loss curve\n\n`%s`\n\n%s\nFull curve: `losses.csv`; trained weights: `checkpoint.safetensors`.\n",
+  RUN, STEPS, LR, SEED, res.engine, res.first_loss, res.last_loss, res.min_loss, res.train_mse, res.max_abs_error, res.r2,
+  res.heldout_mse, join(heldout, ", "), join(targets, ", "), sparkline(res.losses), rows);
+write_file(path_join(RUN, "train-report.md"), md);
+println(sprintf("steps: %d  lr: %.4f  seed: %d", STEPS, LR, SEED));
+println(sprintf("loss first: %.6f  last: %.6f  min: %.6f", res.first_loss, res.last_loss, res.min_loss));
+println(sprintf("train MSE: %.6f  max abs error: %.6f  R2: %.6f", res.train_mse, res.max_abs_error, res.r2));
+println("report:", path_join(RUN, "train-report.md"));

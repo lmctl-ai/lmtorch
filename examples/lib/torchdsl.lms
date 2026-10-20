@@ -1,0 +1,49 @@
+package torchdsl;
+# Shared plumbing for the _dsl_ examples. A _dsl_ block is compiled by lmscript into bytecode (savedsl); the native
+# torchcli executable loads that bytecode and runs it against libtorch inside one process. This file wraps the second step.
+
+# The torchcli executable: TORCHCLI_BIN when set and non-empty, else `torchcli` on PATH.
+fn bin() {
+  exe = env("TORCHCLI_BIN", "");
+  return exe == "" ? "torchcli" : exe;
+}
+
+# Run one or more bytecode files, in order, in ONE torchcli process (host state such as the out results is shared; DSL
+# locals are per file). Returns the decoded result line {ok, result} or {ok: false, phase, code, message[, line, column]}.
+# Returns null in the dry preflight, where system() is simulated and nothing runs.
+fn try_run(files) {
+  exe = bin();
+  r = system ${exe} --dsl ${files};
+  if (r.get("dry", false)) {
+    return null;
+  }
+  if (r.stderr != "") {
+    for (line in lines(trim(r.stderr))) {
+      println("  | " + line);
+    }
+  }
+  if (trim(r.stdout) == "") {
+    return {ok: false, phase: "launch", code: "NO_RESULT", message: f"{exe} exited {r.code} without a result line"};
+  }
+  return json_parse(trim(r.stdout));
+}
+
+# Like try_run, but a failure prints the host's message and exits 1; success returns the result object.
+fn run(files) {
+  res = try_run(files);
+  if (res == null) {
+    return null;
+  }
+  if (!res.ok) {
+    where = res.has("line") ? f" (dsl line {res.line})" : "";
+    println(f"torchcli {res.phase} error {res.code}{where}: {res.message}");
+    exit(1);
+  }
+  return res.result;
+}
+
+# Compile-and-run in one call: write the block's bytecode to path, then run it.
+fn run_block(prog, path) {
+  savedsl(prog, path);
+  return run([path]);
+}
