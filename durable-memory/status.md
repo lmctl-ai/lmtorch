@@ -36,7 +36,9 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   published npm lmscript 0.2.347 predates it (28 gates, cli= skipped).
 
 ## Pending
-- Switch the examples from `schema=` to `cli="lmtorch"` once an lmscript release contains R42.
+- Switch the examples from `schema=` to `cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0"` and run the host with
+  `system ${dsl_cli(p)} --dsl ...` once an lmscript release contains R42+R43 (lmctl-mono bf3ed8a8; release request
+  issues/097). Verified end to end with the mono lmscript against the real v0.3.0 release, 2026-10-20.
 - No BLAS (portable GEMM; no linalg); macOS/Windows not attempted.
 
 ## Rules that apply
