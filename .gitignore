@@ -3,3 +3,4 @@ gemini.txt
 build/
 .tmp/
 artifacts/
+build-dev/

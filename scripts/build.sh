@@ -14,7 +14,7 @@ context=$(mktemp -d)
 trap 'rm -rf "$context"' EXIT HUP INT TERM
 mkdir -p "$context/lmctl-ai/lmcpp" "$context/cppwrapper/pytorch"
 git -C "$lmcpp" archive "$expected" CMakeLists.txt cmake include src examples/toy | tar -x -C "$context/lmctl-ai/lmcpp"
-for path in CMakeLists.txt requirements-torch.lock requirements-test.lock include src tests scripts bin examples docker cli.schema.dev.json; do
+for path in CMakeLists.txt requirements-torch.lock requirements-test.lock include src tests scripts bin examples docker cli.schema.dev.json schema third_party sdk.lock; do
   cp -R "$root/$path" "$context/cppwrapper/pytorch/"
 done
 docker build -f "$context/cppwrapper/pytorch/docker/Dockerfile" --target "$target" -t "$tag" "$context"

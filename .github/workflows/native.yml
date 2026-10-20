@@ -1,0 +1,75 @@
+name: native
+
+# The docker-free build: a fully static torchcli (static CPU-only libtorch from source, cached by lock, script, arch and
+# compiler) and a fast development build against the PyTorch wheel, each running ./test.sh. Nothing is published.
+# Not yet run on GitHub: the first run measures the cold libtorch build (expected to dominate; the cache makes later runs fast).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LMCPP_REF: f6c6f51797912a369d6b27cf9e96f148a9a0e4d1
+  LMCTL_VERSION: 0.2.347   # lmscript with DSL bytecode v5 (>= 0.2.346 required)
+
+jobs:
+  native:
+    name: ${{ matrix.mode }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04-arm, arch: arm64, mode: static }
+          - { runner: ubuntu-24.04, arch: amd64, mode: static }
+          - { runner: ubuntu-24.04-arm, arch: arm64, mode: dev }
+          - { runner: ubuntu-24.04, arch: amd64, mode: dev }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: torchcli
+      - name: Checkout pinned lmcpp
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: lmctl-ai/lmcpp
+          ref: ${{ env.LMCPP_REF }}
+          path: lmcpp
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af   # v4.1.0
+        with:
+          node-version: '24.15'
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build nlohmann-json3-dev python3-yaml python3-typing-extensions python3-venv file
+          npm install -g "@lmctl-ai/lmctl@${LMCTL_VERSION}"
+          lmscript --version
+      - name: Oracle venv (torch 2.9.1+cpu wheel; test-only)
+        run: |
+          python3 -m venv ~/.cache/torchcli/oracle-venv
+          ~/.cache/torchcli/oracle-venv/bin/pip install --quiet torch==2.9.1+cpu safetensors numpy --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Restore static libtorch
+        if: matrix.mode == 'static'
+        id: libtorch
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684   # v4.2.3
+        with:
+          path: ~/.cache/torchcli/libtorch-static
+          key: libtorch-${{ matrix.arch }}-${{ hashFiles('torchcli/libtorch.lock', 'torchcli/scripts/build-libtorch.sh') }}-gcc13
+      - name: Build static libtorch (cold cache only)
+        if: matrix.mode == 'static' && steps.libtorch.outputs.cache-hit != 'true'
+        run: LIBTORCH_JOBS=4 torchcli/scripts/build-libtorch.sh
+      - name: Build torchcli
+        env:
+          LMCPP_DIR: ${{ github.workspace }}/lmcpp
+        run: |
+          if [ "${{ matrix.mode }}" = dev ]; then torchcli/scripts/build-native.sh --dev; else torchcli/scripts/build-native.sh; fi
+      - name: Test
+        run: |
+          if [ "${{ matrix.mode }}" = static ]; then export TORCHCLI_REQUIRE_STATIC=1 TORCHCLI_BIN="$PWD/torchcli/build/bin/torchcli"; else export TORCHCLI_BIN="$PWD/torchcli/build-dev/bin/torchcli"; fi
+          torchcli/test.sh

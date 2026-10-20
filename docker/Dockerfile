@@ -16,7 +16,7 @@ RUN cmake -S /src/lmcpp -B /build-lmcpp -G Ninja -DCMAKE_BUILD_TYPE=Release -DLM
 COPY cppwrapper/pytorch /src/pytorch
 RUN cmake -S /src/pytorch -B /build-torchcli -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')" \
-    -Dlmcpp_DIR=/opt/lmcpp/lib/cmake/lmcpp \
+    -Dlmcpp_DIR=/opt/lmcpp/lib/cmake/lmcpp -DTORCHCLI_PYTHON_TESTS=ON \
     && cmake --build /build-torchcli --parallel 2
 
 FROM ${BASE} AS test
