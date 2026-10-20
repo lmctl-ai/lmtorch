@@ -1,12 +1,15 @@
+> Historical design record (2026-10). Its docker delivery and wheel locks were replaced by the native build in
+> `scripts/build-libtorch.sh` and `scripts/build-native.sh`; see README.md and durable-memory/ for the current state.
+
 # lmcpp and a stateless libtorch native tool
 
-Decision: build `~/repos/lmctl-ai/lmcpp` as a small C++17 SDK, then `torchcli` here as a CPU-only multi-call binary. Use direct C++ handlers and durable safetensors artifacts; no daemon in v1. This is a design, not an implementation or build report. Commands below are acceptance targets for files to be implemented.
+Decision: build `~/repos/lmctl-ai/lmcpp` as a small C++17 SDK, then `lmtorch` here as a CPU-only multi-call binary. Use direct C++ handlers and durable safetensors artifacts; no daemon in v1. This is a design, not an implementation or build report. Commands below are acceptance targets for files to be implemented.
 
 ## Contract findings that affect the design
 
 - Read: `gemini.txt`; lmapi `docs/protocol.md` including §6.1; lmrust README and `types`, `inputs`, `publish`, `server/{cli,output}`, `clap_bridge/{mod,generate,child}`; lmts README; physim overlay, published schema and recipes.
 - **Envelope correction:** the current SDK wire format is raw result JSON on exit 0, or `{ "success": false, "error": { "code", "message", "data" } }` on failure. `lmscript/clitools-binding.ts:156–166` wraps these into `{status:"ok",result}` / `{status:"error",error}`. Do not print a second status envelope from C++; that would nest `result` and misclassify failures.
-- Publish `cli.schema.v1`, `tool:"torchcli"`, flat snake_case operations, explicit `access`, `returns:"object"`, version, globals and `inputs:["flags","json"]`; omit `product`. Refuse GraphQL with `FORM_NOT_ALLOWED` until implemented.
+- Publish `cli.schema.v1`, `tool:"lmtorch"`, flat snake_case operations, explicit `access`, `returns:"object"`, version, globals and `inputs:["flags","json"]`; omit `product`. Refuse GraphQL with `FORM_NOT_ALLOWED` until implemented.
 - `--schema` must need no artifact directory, model, network or handler initialization. Embed schema/overlay data; never read a runtime overlay file. Loading linked DSOs still has a measurable startup cost.
 - New tools can use only the lmapi runner. Existing CLIs need `maybe_run_cli`: only lmapi-shaped argv enters it; all other argv retains legacy parsing/output. Native domain statuses stay inside successful results; standardized failures use protocol exits and `error.data.tool_code`.
 - Physim's temporary `result_file` adapter reads CSV/JSON/text and deletes the file; its 16 MiB cap is not an artifact transport. Persistent tensor output changes filesystem state and must be `write`, unlike physim's private disposable simulation output.
@@ -42,7 +45,7 @@ Also expose `publish_schema`, `parse_published_schema`, `validate`, `resolve_inp
 
 Add optional `lmcpp::cli11_bridge` after the direct API works. Use CLI11's definition tree (not only parsed subcommands) plus explicit overlay metadata; parser type labels/custom validators cannot reliably supply all schema types/enums. An overlay/typed registration must fill gaps or schema generation fails. Public `Bridge(app, embedded_overlay).schema()/maybe_run()/assert_coverage()` mirrors lmrust. Require every leaf to be mapped or excluded, reject duplicate published names, and snapshot schema ordering. [CLI11 API](https://raw.githubusercontent.com/CLIUtils/CLI11/main/include/CLI/App.hpp)
 
-For torchcli, use direct handlers; it has no legacy CLI to self-exec. A later legacy bridge may self-exec with argv arrays, a recursion guard, bounded stdout/stderr, timeout/signal handling and exit mapping. Never use shell command strings. Keep `result_file` temporary parsing distinct from persistent artifact references; a size overflow is `COMMAND_FAILED` with `data.tool_code:"OUTPUT_TOO_LARGE"`, matching lmrust.
+For lmtorch, use direct handlers; it has no legacy CLI to self-exec. A later legacy bridge may self-exec with argv arrays, a recursion guard, bounded stdout/stderr, timeout/signal handling and exit mapping. Never use shell command strings. Keep `result_file` temporary parsing distinct from persistent artifact references; a size overflow is `COMMAND_FAILED` with `data.tool_code:"OUTPUT_TOO_LARGE"`, matching lmrust.
 
 Suggested layout:
 ```text
@@ -56,7 +59,7 @@ lmcpp/
 pytorch/
   CMakeLists.txt; src/{main,tensor_io,tensor_ops,mlp}.cpp
   lmapi/overlay.toml; cli.schema.dev.json; examples/*.lms
-  tests/; docker/{Dockerfile,requirements.lock}; bin/torchcli
+  tests/; docker/{Dockerfile,requirements.lock}; bin/lmtorch
 ```
 
 ## Artifact boundary and twelve operations
@@ -108,7 +111,7 @@ Multi-stage image copies the installed wheel/dependencies and binary at identica
 
 Budget estimates, not measurements: runtime 0.6–1.5 GB unpacked, builder 2–4 GB, peak working/cache disk <10 GB. Cold dependency download/install + build about 10–30 minutes on 2 cores; wrapper compilation about 2–10 minutes, cached incremental 10–90 seconds. Torch-heavy translation units may take longer; serial build targets <5 GB RSS and leaves host headroom. Record actual image bytes, wall time and RSS before accepting these budgets.
 
-Run with two CPU threads/intra-op and one inter-op thread; pass `OMP_NUM_THREADS=2`. A host `bin/torchcli` shim execs Docker with argument forwarding (`"$@"`), no tty, same absolute workspace mount and cwd, host uid/gid, `--network=none`, `--cpus=2 --memory=5g`. Send Docker failures to a protocol error mapper. Artifact refs remain valid across CLI and recipe calls. Put lmscript TMPDIR under that mounted workspace so generated `--input-file` paths are visible inside the container; never rewrite JSON path strings ad hoc.
+Run with two CPU threads/intra-op and one inter-op thread; pass `OMP_NUM_THREADS=2`. A host `bin/lmtorch` shim execs Docker with argument forwarding (`"$@"`), no tty, same absolute workspace mount and cwd, host uid/gid, `--network=none`, `--cpus=2 --memory=5g`. Send Docker failures to a protocol error mapper. Artifact refs remain valid across CLI and recipe calls. Put lmscript TMPDIR under that mounted workspace so generated `--input-file` paths are visible inside the container; never rewrite JSON path strings ad hoc.
 
 ## Stages and acceptance gates
 
@@ -143,15 +146,15 @@ Gate: both CLI forms return `{"value":5}`, recipe returns 20; schema succeeds of
 **Stage 1a — wheel/link probe, then tensor arithmetic.** Dockerfile uses the repositories root as context to copy both lmcpp and this project (with a strict allowlist `docker/Dockerfile.dockerignore`). Add CTest integration targets for actual wheel headers/CMake discovery, no missing DSOs, no CUDA, dtype roundtrips and malformed artifacts. Add safetensors and Python oracle scripts only to the test target; use its installed torch for numerical reference checks. No source-build fallback.
 ```sh
 cd ~/repos/cppwrapper/pytorch
-docker build --platform linux/arm64 -f docker/Dockerfile --target test -t torchcli:test ~/repos
-docker run --rm --network=none torchcli:test ctest --test-dir /build --output-on-failure
-docker build --platform linux/arm64 -f docker/Dockerfile --target runtime -t torchcli:dev ~/repos
+docker build --platform linux/arm64 -f docker/Dockerfile --target test -t lmtorch:test ~/repos
+docker run --rm --network=none lmtorch:test ctest --test-dir /build --output-on-failure
+docker build --platform linux/arm64 -f docker/Dockerfile --target runtime -t lmtorch:dev ~/repos
 mkdir -p artifacts/run01 .tmp
 export PATH="$PWD/bin:$PATH" TMPDIR="$PWD/.tmp"
-torchcli --schema > cli.schema.dev.json
-torchcli tensor_create --shape 2 --shape 2 --fill 1 --out artifacts/run01/a.safetensors
-torchcli tensor_matmul --a 'artifacts/run01/a.safetensors#tensor' --b 'artifacts/run01/a.safetensors#tensor' --out artifacts/run01/b.safetensors
-torchcli tensor_inspect --input 'artifacts/run01/b.safetensors#tensor'
+lmtorch --schema > cli.schema.dev.json
+lmtorch tensor_create --shape 2 --shape 2 --fill 1 --out artifacts/run01/a.safetensors
+lmtorch tensor_matmul --a 'artifacts/run01/a.safetensors#tensor' --b 'artifacts/run01/a.safetensors#tensor' --out artifacts/run01/b.safetensors
+lmtorch tensor_inspect --input 'artifacts/run01/b.safetensors#tensor'
 ```
 Gate: inspect reports shape [2,2], values [2,2,2,2]; separate processes and restarted containers produce identical results. Declare shape as repeated numbers (`occurs:'+'`), then enforce integral nonnegative dimensions in the handler. Existing output yields CONFLICT and no changes. Record startup, I/O and matmul timings; fresh-schema discovery must not create artifacts.
 

@@ -1,4 +1,4 @@
-# torchcli durable memory
+# lmtorch durable memory
 
 Navigation for agents. Code and `./test.sh` take precedence over these notes.
 
@@ -14,4 +14,4 @@ Elsewhere in the repository: `docs/dsl-api.md` (DSL API reference), `docs/parity
 
 Related checkouts on the development host: `../poc/cpp-dsl-sdk` (the VM; durable-memory/index.md there),
 `../poc/lmcad`, `../poc/lmhtml` (sibling DSL hosts this one copies), `../lmctl-mono/lmscript/durable-memory/dsl-framework.md`
-(the `_dsl_` framework and language spec), `../lmcpp` (the lmapi C++ SDK; torchcli pins revision f6c6f51).
+(the `_dsl_` framework and language spec), `../lmcpp` (the lmapi C++ SDK; lmtorch pins revision f6c6f51).

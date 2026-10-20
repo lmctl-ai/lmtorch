@@ -1,14 +1,14 @@
 package torchdsl;
 # Shared plumbing for the _dsl_ examples. A _dsl_ block is compiled by lmscript into bytecode (savedsl); the native
-# torchcli executable loads that bytecode and runs it against libtorch inside one process. This file wraps the second step.
+# lmtorch executable loads that bytecode and runs it against libtorch inside one process. This file wraps the second step.
 
-# The torchcli executable: TORCHCLI_BIN when set and non-empty, else `torchcli` on PATH.
+# The lmtorch executable: LMTORCH_BIN when set and non-empty, else `lmtorch` on PATH.
 fn bin() {
-  exe = env("TORCHCLI_BIN", "");
-  return exe == "" ? "torchcli" : exe;
+  exe = env("LMTORCH_BIN", "");
+  return exe == "" ? "lmtorch" : exe;
 }
 
-# Run one or more bytecode files, in order, in ONE torchcli process (host state such as the out results is shared; DSL
+# Run one or more bytecode files, in order, in ONE lmtorch process (host state such as the out results is shared; DSL
 # locals are per file). Returns the decoded result line {ok, result} or {ok: false, phase, code, message[, line, column]}.
 # Returns null in the dry preflight, where system() is simulated and nothing runs.
 fn try_run(files) {
@@ -36,7 +36,7 @@ fn run(files) {
   }
   if (!res.ok) {
     where = res.has("line") ? f" (dsl line {res.line})" : "";
-    println(f"torchcli {res.phase} error {res.code}{where}: {res.message}");
+    println(f"lmtorch {res.phase} error {res.code}{where}: {res.message}");
     exit(1);
   }
   return res.result;

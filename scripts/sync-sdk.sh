@@ -2,7 +2,7 @@
 # Vendor the single-source cpp-dsl-sdk header and pin both its commit and content hash (same contract as lmcad/lmhtml).
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SDK="${CPP_DSL_SDK:-$HERE/../poc/cpp-dsl-sdk}"
+SDK="${CPP_DSL_SDK:-$HERE/../cpp-dsl-sdk}"
 LOCK="$HERE/sdk.lock"
 HEADER="$HERE/third_party/dslvm/dslvm.hpp"
 hash() { sha256sum "$1" | cut -c1-64; }

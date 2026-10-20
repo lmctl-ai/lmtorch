@@ -8,8 +8,8 @@ import torch
 from safetensors.torch import load_file, save_file
 
 binary, unit, oracle = sys.argv[1:]
-if not os.path.exists(binary): binary = binary.replace("/build-torchcli/", "/build/")
-if not os.path.exists(unit): unit = unit.replace("/build-torchcli/", "/build/")
+if not os.path.exists(binary): binary = binary.replace("/build-lmtorch/", "/build/")
+if not os.path.exists(unit): unit = unit.replace("/build-lmtorch/", "/build/")
 # A fully static binary makes ldd exit 1 with "not a dynamic executable"; a dynamic one must resolve every library.
 ldd = subprocess.run(["ldd", binary], text=True, capture_output=True)
 assert "not found" not in ldd.stdout, ldd.stdout
@@ -28,7 +28,7 @@ def approx(path, name, expected):
     actual = load_file(path, device="cpu")[name]
     assert torch.allclose(actual, expected, rtol=1e-5, atol=1e-6), (actual, expected)
 
-with tempfile.TemporaryDirectory(prefix="torchcli-test-") as d:
+with tempfile.TemporaryDirectory(prefix="lmtorch-test-") as d:
     active_cwd=d
     paths = {name: os.path.join(d, name + ".safetensors") for name in (
         "a", "b", "mm", "sum", "soft", "linear", "lininput", "packed", "loaded", "grad",
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory(prefix="torchcli-test-") as d:
     # Dry-run and readonly must leave every artifact byte-for-byte unchanged.
     before={f:hashlib.sha256(open(os.path.join(d,f),"rb").read()).hexdigest() for f in os.listdir(d) if f.endswith(".safetensors")}
     dry=call("--dryrun","tensor_create","--shape","2","--out",os.path.join(d,"dry.safetensors"));assert dry.returncode==0 and json.loads(dry.stdout)["dryRun"]
-    env=os.environ.copy();env["TORCHCLI_READONLY"]="yes"
+    env=os.environ.copy();env["LMTORCH_READONLY"]="yes"
     blocked=call("tensor_create","--shape","2","--out",os.path.join(d,"blocked.safetensors"),env=env,ok=False);assert blocked.returncode==6 and json.loads(blocked.stdout)["error"]["code"]=="READONLY_VIOLATION"
     after={f:hashlib.sha256(open(os.path.join(d,f),"rb").read()).hexdigest() for f in os.listdir(d) if f.endswith(".safetensors")}
     assert before==after and not os.path.exists(os.path.join(d,"dry.safetensors")) and not os.path.exists(os.path.join(d,"blocked.safetensors"))
@@ -154,8 +154,8 @@ with tempfile.TemporaryDirectory(prefix="torchcli-test-") as d:
     result("tensor_create","--input-json",'{"shape":[1],"dtype":"I64","values":[9007199254740993],"out":"'+exact_i64+'"}')
     assert load_file(exact_i64)["tensor"].item()==9007199254740993
     rejected("VALIDATION_ERROR","tensor_softmax","--input",paths["a"]+"#tensor","--dim",9223372036854775808,"--out",os.path.join(d,"bad-dim.safetensors"))
-    rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out","../torchcli-escape.safetensors")
-    with tempfile.TemporaryDirectory(prefix="torchcli-outside-") as outside:
+    rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out","../lmtorch-escape.safetensors")
+    with tempfile.TemporaryDirectory(prefix="lmtorch-outside-") as outside:
         os.symlink(outside,os.path.join(d,"escape"))
         rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out",os.path.join(d,"escape","symlink-out.safetensors"))
         external=os.path.join(outside,"external.safetensors");save_file({"tensor":torch.ones(1)},external)
@@ -163,5 +163,5 @@ with tempfile.TemporaryDirectory(prefix="torchcli-test-") as d:
     nf=os.path.join(d,"nonfinite.safetensors");save_file({"tensor":torch.cat((torch.ones(32),torch.full((8,),float("nan"))))},nf)
     nfresult=result("tensor_inspect","--input",nf+"#tensor","--limit",1)
     assert nfresult["values"]==[1.0] and nfresult["nonfinite_count"]==8,nfresult
-    print("torchcli CLI regression cases: 21 passed (checkpoint shapes/metadata, values, softmax bounds, nonfinite count and path containment)")
-    print("torchcli integration: all 12 operations, Torch numerical oracle, deterministic rand, checkpoint resume, readonly/dryrun, ldd and CPU-only passed")
+    print("lmtorch CLI regression cases: 21 passed (checkpoint shapes/metadata, values, softmax bounds, nonfinite count and path containment)")
+    print("lmtorch integration: all 12 operations, Torch numerical oracle, deterministic rand, checkpoint resume, readonly/dryrun, ldd and CPU-only passed")

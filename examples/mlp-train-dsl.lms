@@ -1,15 +1,15 @@
 # _dsl_ version of mlp-train.lms: the same 2-4-1 ReLU MLP, seeds 11..14, inputs, targets, 20 plain-SGD steps at lr 0.05
 # and checkpoint format (w1, b1, w2, b2 + metadata torchcli_format=1, arch=mlp_relu_v1, step). The lmapi version runs
-# 28 torchcli processes and writes 28 files; here the whole loop is one DSL program in one process. Afterwards the
+# 28 lmtorch processes and writes 28 files; here the whole loop is one DSL program in one process. Afterwards the
 # lmapi operation mlp_forward (same executable, schema import) scores the DSL-written checkpoint: both paths agree.
-# Run: lmscript examples/mlp-train-dsl.lms [run_dir]        (torchcli on PATH: the schema import launches it by name)
+# Run: lmscript examples/mlp-train-dsl.lms [run_dir]        (lmtorch on PATH: the schema import launches it by name)
 import "./lib/torchdsl.lms";
-import "../cli.schema.dev.json" as torchcli;
+import "../cli.schema.dev.json" as lmtorch;
 
 RUN = ARGV.get(0, "artifacts/mlp-train-dsl");
 mkdir(RUN, true);
 
-train = _dsl_ schema="../schema/torchcli.dsl.json";
+train = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 # tensor_rand seeds a fresh generator per call; manual_seed + rand draws the same values.
 torch.manual_seed(11);
@@ -53,10 +53,10 @@ end _dsl_
 res = torchdsl.run_block(train, path_join(RUN, "mlp-train.dslb"));
 if (res != null) {
   # Cross-check through the lmapi operation of the same binary.
-  fwd = torchcli.mlp_forward({checkpoint: path_join(RUN, "checkpoint_20.safetensors"), input: path_join(RUN, "x.safetensors#tensor"), out: path_join(RUN, sprintf("lmapi-prediction-%d.safetensors", now()))});
+  fwd = lmtorch.mlp_forward({checkpoint: path_join(RUN, "checkpoint_20.safetensors"), input: path_join(RUN, "x.safetensors#tensor"), out: path_join(RUN, sprintf("lmapi-prediction-%d.safetensors", now()))});
   if (fwd.status == "error") { println(fwd.error.message); exit(1); }
   if (fwd.status == "ok") {
-    seen = torchcli.tensor_inspect({input: fwd.result.ref, limit: 4});
+    seen = lmtorch.tensor_inspect({input: fwd.result.ref, limit: 4});
     if (seen.status == "error") { println(seen.error.message); exit(1); }
     if (seen.status == "ok") {
       for (i = 0; i < 4; i = i + 1) {

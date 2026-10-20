@@ -1,6 +1,6 @@
 {
   "dsl.schema": 2,
-  "name": "torchcli",
+  "name": "lmtorch",
   "enums": {
     "DType": ["F32", "F64", "I64", "BOOL"]
   },

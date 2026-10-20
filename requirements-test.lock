@@ -1,7 +1,0 @@
-# Test-image only. Two hashes per platform wheel: manylinux aarch64 first, manylinux x86_64 second (added 2026-10-16 for amd64 CI).
-numpy==2.4.6 \
-    --hash=sha256:0ab0a9c4ffb1a6d95ef519fe4247dba8eb6b18ad93999f76b7f657039acabd47 \
-    --hash=sha256:89cd468399cfd2504718f0ba50e410dca55a170b61a02ad92bb18c8a65186e93
-safetensors==0.8.0 \
-    --hash=sha256:7a46e5ff292c356d6991e60942ba7f79817682d3a2cef0702136448cb9c4d235 \
-    --hash=sha256:fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774

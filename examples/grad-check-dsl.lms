@@ -6,7 +6,7 @@ import "./lib/torchdsl.lms";
 RUN = ARGV.get(0, "artifacts/grad-check-dsl");
 mkdir(RUN, true);
 
-grad = _dsl_ schema="../schema/torchcli.dsl.json";
+grad = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let x = torch.tensor("[1.0, -2.0, 3.0]", DType.F64).requires_grad(true);
 let loss = x.square().sum();

@@ -1,7 +1,7 @@
-// The `_dsl_` bytecode host: binds schema/torchcli.dsl.json (embedded byte for byte) to libtorch through the vendored
+// The `_dsl_` bytecode host: binds schema/lmtorch.dsl.json (embedded byte for byte) to libtorch through the vendored
 // cpp-dsl-sdk VM. One process runs one or more chunks against one Torch/Out context; stdout carries exactly one JSON line.
-#include "torchcli/dsl_host.hpp"
-#include "torchcli/safetensors.hpp"
+#include "lmtorch/dsl_host.hpp"
+#include "lmtorch/safetensors.hpp"
 #include "dslvm.hpp"
 #include "dsl_schema_embedded.hpp"
 #include <torch/torch.h>
@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-namespace torchcli::dsl {
+namespace lmtorch::dsl {
 namespace {
 using dslvm::Args;
 using dslvm::Value;
@@ -137,7 +137,7 @@ std::string tensor_text(const torch::Tensor& t, bool json) {
 
 // ---------------------------------------------------------------- files (confined to the working directory)
 std::string read_text(const std::string& path) {
-  torchcli::check_contained(path);
+  lmtorch::check_contained(path);
   std::error_code ec;
   if (!std::filesystem::is_regular_file(path, ec)) fail("cannot read " + path);
   if (std::filesystem::file_size(path, ec) > (uint64_t(256) << 20)) fail("cannot read " + path + ": larger than 256 MiB");
@@ -149,7 +149,7 @@ std::string read_text(const std::string& path) {
 }
 void write_text_atomic(const std::string& path, const std::string& text) {
   if (path.empty()) fail("output path must not be empty");
-  torchcli::check_contained(path);
+  lmtorch::check_contained(path);
   std::string tmp = path + ".tmpXXXXXX";
   std::vector<char> name(tmp.begin(), tmp.end());
   name.push_back('\0');
@@ -167,17 +167,17 @@ void write_text_atomic(const std::string& path, const std::string& text) {
   if (::rename(name.data(), path.c_str()) != 0) { ::unlink(name.data()); fail("cannot write " + path + ": " + std::strerror(errno)); }
 }
 
-torchcli::TensorData to_data(const torch::Tensor& input) {
+lmtorch::TensorData to_data(const torch::Tensor& input) {
   torch::NoGradGuard g;
   auto t = input.detach().contiguous().cpu();
-  torchcli::TensorData d;
+  lmtorch::TensorData d;
   d.dtype = dtype_name(t.scalar_type());
   d.shape.assign(t.sizes().begin(), t.sizes().end());
   d.bytes.resize(t.nbytes());
   if (!d.bytes.empty()) std::memcpy(d.bytes.data(), t.data_ptr(), d.bytes.size());
   return d;
 }
-torch::Tensor from_data(const torchcli::TensorData& d) {
+torch::Tensor from_data(const lmtorch::TensorData& d) {
   auto t = torch::empty(d.shape, torch::TensorOptions().dtype(scalar_type(d.dtype)));
   if (t.nbytes() != d.bytes.size()) fail("tensor payload has invalid size");
   if (!d.bytes.empty()) std::memcpy(t.data_ptr(), d.bytes.data(), d.bytes.size());
@@ -192,12 +192,12 @@ template <class F> auto io(F&& f) -> decltype(f()) {
 void save_bundle(const std::string& path, const std::map<std::string, torch::Tensor>& tensors, const std::map<std::string, std::string>& meta) {
   if (path.empty()) fail("output path must not be empty");
   if (tensors.empty()) fail("cannot save an empty bundle: put() at least one tensor");
-  torchcli::TensorBundle b;
+  lmtorch::TensorBundle b;
   for (const auto& [name, t] : tensors) b.tensors.emplace(name, to_data(t));
   b.metadata = meta;
-  io([&] { return torchcli::write_bundle(path, b, true); });
+  io([&] { return lmtorch::write_bundle(path, b, true); });
 }
-torchcli::TensorBundle load_bundle(const std::string& path) { return io([&] { return torchcli::read_bundle(path); }); }
+lmtorch::TensorBundle load_bundle(const std::string& path) { return io([&] { return lmtorch::read_bundle(path); }); }
 
 // ---------------------------------------------------------------- tensor literals and CSV
 // Every scalar must sit at the same, final depth: "[3, [1, 2]]" and "[[1], [[2]]]" are ragged, not reshaped.
@@ -346,7 +346,7 @@ std::string add_layer(ModelBox& m, const std::string& kind, const std::vector<in
   else fail("unknown layer '" + kind + "'");
   return kind;
 }
-void load_weights(ModelBox& m, const torchcli::TensorBundle& b, const std::string& path) {
+void load_weights(ModelBox& m, const lmtorch::TensorBundle& b, const std::string& path) {
   std::map<std::string, torch::Tensor> mine;
   for (const auto& kv : m.seq->named_parameters()) mine[kv.key()] = kv.value();
   for (const auto& kv : m.seq->named_buffers()) mine[kv.key()] = kv.value();
@@ -443,7 +443,7 @@ void register_torch(dslvm::Registry& r, Host& h) {
 
   // ---- Torch: process settings
   method(r, "Torch", "version", {}, "string", [](void*, Args&) {
-    return Value::string(std::string("torchcli 0.3.0 (libtorch ") + std::to_string(TORCH_VERSION_MAJOR) + "." + std::to_string(TORCH_VERSION_MINOR) + "." + std::to_string(TORCH_VERSION_PATCH) + ", CPU)");
+    return Value::string(std::string("lmtorch 0.3.0 (libtorch ") + std::to_string(TORCH_VERSION_MAJOR) + "." + std::to_string(TORCH_VERSION_MINOR) + "." + std::to_string(TORCH_VERSION_PATCH) + ", CPU)");
   });
   method(r, "Torch", "manual_seed", {"int"}, "void", [](void*, Args& a) {
     if (a[0].i < 0) fail("seed must be nonnegative");
@@ -928,7 +928,7 @@ void register_torch(dslvm::Registry& r, Host& h) {
 void print_summary(dslvm::Registry& reg) {
   std::vector<std::string> order;
   std::map<std::string, std::vector<std::string>> members;
-  std::cout << "torchcli DSL host: compile with lmscript against `torchcli --dsl-schema --json`, run with `torchcli --dsl FILE.dslb`\n";
+  std::cout << "lmtorch DSL host: compile with lmscript against `lmtorch --dsl-schema --json`, run with `lmtorch --dsl FILE.dslb`\n";
   std::cout << "enum DType: F32, F64, I64, BOOL\n";
   for (const auto& sig : reg.signatures()) {
     if (sig.rfind("context ", 0) == 0) std::cout << sig << "\n";
@@ -952,7 +952,7 @@ bool selects_dsl(int argc, char** argv) {
 }
 
 int run(int argc, char** argv) {
-  const std::string usage = "usage: torchcli --dsl-schema [--json] | --dsl-signatures | --dsl FILE.dslb [FILE.dslb ...]\n";
+  const std::string usage = "usage: lmtorch --dsl-schema [--json] | --dsl-signatures | --dsl FILE.dslb [FILE.dslb ...]\n";
   Host host;
   dslvm::Registry reg;
   register_torch(reg, host);
@@ -1004,4 +1004,4 @@ int run(int argc, char** argv) {
   }
   return dslvm::report_ok(host.out.result.dump());
 }
-}  // namespace torchcli::dsl
+}  // namespace lmtorch::dsl

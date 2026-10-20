@@ -1,7 +1,7 @@
-"""PyTorch oracle for the DSL host: the same seeds, layers, losses and optimizer steps computed by `torchcli --dsl` and by
+"""PyTorch oracle for the DSL host: the same seeds, layers, losses and optimizer steps computed by `lmtorch --dsl` and by
 Python torch must agree, and model files must load in both directions. Test-only: the shipped binary contains no Python.
 
-Usage: python dsl_oracle.py TORCHCLI LMSCRIPT   (python needs torch and safetensors; cwd is irrelevant)
+Usage: python dsl_oracle.py LMTORCH LMSCRIPT   (python needs torch and safetensors; cwd is irrelevant)
 """
 import json
 import os
@@ -14,7 +14,7 @@ from safetensors.torch import load_file, save_file
 
 binary, lmscript = sys.argv[1:3]
 here = os.path.dirname(os.path.abspath(__file__))
-schema = os.path.join(os.path.dirname(here), "schema", "torchcli.dsl.json")
+schema = os.path.join(os.path.dirname(here), "schema", "lmtorch.dsl.json")
 
 PROGRAM = r'''
 p = _dsl_ schema=${SCHEMA};
@@ -66,9 +66,9 @@ def close(name, actual, expected, tol=1e-5):
     else:
         assert torch.allclose(a.to(torch.float64), e.to(torch.float64), rtol=tol, atol=tol), (name, a, e)
 
-with tempfile.TemporaryDirectory(prefix="torchcli-oracle-") as d:
+with tempfile.TemporaryDirectory(prefix="lmtorch-oracle-") as d:
     os.chdir(d)
-    # A Python-trained model saved with torchcli's metadata must load through torch.load_model.
+    # A Python-trained model saved with lmtorch's metadata must load through torch.load_model.
     torch.manual_seed(99)
     py_model = torch.nn.Sequential(torch.nn.Linear(3, 5), torch.nn.Tanh(), torch.nn.Linear(5, 2))
     save_file({k: v.contiguous() for k, v in py_model.state_dict().items()}, "py-model.safetensors",

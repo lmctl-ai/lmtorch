@@ -2,42 +2,42 @@
 # The native test suite (no docker): SDK pin, schema and signature parity, static-binary check, C++ unit tests, the DSL
 # API and refusal suites, every _dsl_ example, the lmapi recipes, and (when a Python with torch is available) the PyTorch
 # oracles for both front ends.
-#   TORCHCLI_BIN       binary under test (default build/bin/torchcli, else build-dev/bin/torchcli)
+#   LMTORCH_BIN       binary under test (default build/bin/lmtorch, else build-dev/bin/lmtorch)
 #   LMSCRIPT_BIN       compiler (default lmscript on PATH; must emit DSL bytecode v5)
-#   ORACLE_PYTHON      python with torch + safetensors (default ~/.cache/torchcli/oracle-venv/bin/python when present)
-#   TORCHCLI_REQUIRE_STATIC=1  fail unless the binary is a static executable (release gate)
+#   ORACLE_PYTHON      python with torch + safetensors (default ~/.cache/lmtorch/oracle-venv/bin/python when present)
+#   LMTORCH_REQUIRE_RELEASE=1  fail unless only glibc is dynamically linked (release gate)
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
-if [ -z "${TORCHCLI_BIN:-}" ]; then
-  if [ -x build/bin/torchcli ]; then TORCHCLI_BIN="$HERE/build/bin/torchcli"; else TORCHCLI_BIN="$HERE/build-dev/bin/torchcli"; fi
+if [ -z "${LMTORCH_BIN:-}" ]; then
+  if [ -x build/bin/lmtorch ]; then LMTORCH_BIN="$HERE/build/bin/lmtorch"; else LMTORCH_BIN="$HERE/build-dev/bin/lmtorch"; fi
 fi
-BIN="$(cd "$(dirname "$TORCHCLI_BIN")" && pwd)/$(basename "$TORCHCLI_BIN")"
-UNIT="$(dirname "$(dirname "$BIN")")/torchcli_unit"
+BIN="$(cd "$(dirname "$LMTORCH_BIN")" && pwd)/$(basename "$LMTORCH_BIN")"
+UNIT="$(dirname "$(dirname "$BIN")")/lmtorch_unit"
 LMSCRIPT="${LMSCRIPT_BIN:-$(command -v lmscript || true)}"
 ORACLE_PYTHON="${ORACLE_PYTHON:-}"
-[ -n "$ORACLE_PYTHON" ] || { [ -x "$HOME/.cache/torchcli/oracle-venv/bin/python" ] && ORACLE_PYTHON="$HOME/.cache/torchcli/oracle-venv/bin/python"; } || true
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/torchcli-test-XXXXXX")"
+[ -n "$ORACLE_PYTHON" ] || { [ -x "$HOME/.cache/lmtorch/oracle-venv/bin/python" ] && ORACLE_PYTHON="$HOME/.cache/lmtorch/oracle-venv/bin/python"; } || true
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/lmtorch-test-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
 [ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.346), or set LMSCRIPT_BIN"
-# Schema-module imports and the example helper launch torchcli by name.
+# Schema-module imports and the example helper launch lmtorch by name.
 export PATH="$(dirname "$BIN"):$PATH"
-export TORCHCLI_BIN="$BIN"
+export LMTORCH_BIN="$BIN"
 
 scripts/sync-sdk.sh --verify >/dev/null || fail "third_party/dslvm/dslvm.hpp differs from sdk.lock"
 ok "vendored dslvm.hpp matches sdk.lock"
-printf 'p = _dsl_ schema="%s";\nwhile (false) {}\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE/schema/torchcli.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
+printf 'p = _dsl_ schema="%s";\nwhile (false) {}\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
 "$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v5 while loop against the schema"
 [ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 5 ] || fail "$LMSCRIPT does not emit bytecode v5"
 ok "compiler $("$LMSCRIPT" --version) emits DSL bytecode v5"
 
-"$BIN" --dsl-schema --json | cmp - schema/torchcli.dsl.json || fail "embedded DSL schema differs from schema/torchcli.dsl.json"
+"$BIN" --dsl-schema --json | cmp - schema/lmtorch.dsl.json || fail "embedded DSL schema differs from schema/lmtorch.dsl.json"
 ok "--dsl-schema --json prints the schema bytes exactly"
-diff -u <("$LMSCRIPT" --dsl-signatures schema/torchcli.dsl.json) <("$BIN" --dsl-signatures) || fail "registry and schema signatures differ"
+diff -u <("$LMSCRIPT" --dsl-signatures schema/lmtorch.dsl.json) <("$BIN" --dsl-signatures) || fail "registry and schema signatures differ"
 ok "registry signatures equal the compiler's ($("$BIN" --dsl-signatures | wc -l | tr -d ' ') signatures)"
 "$BIN" --dsl-schema > "$WORK/summary.txt"
 missing=0
@@ -49,13 +49,16 @@ ok "--dsl-schema summary lists every member"
 "$BIN" --schema | cmp - cli.schema.dev.json || fail "lmapi --schema differs from cli.schema.dev.json"
 ok "lmapi --schema is byte-identical to cli.schema.dev.json"
 
-if file -L "$BIN" | grep -q 'statically linked'; then
-  { ldd "$BIN" 2>&1 || true; } | grep -q "not a dynamic executable" || fail "static binary still reports dynamic dependencies"
-  ok "static executable: $(stat -c %s "$BIN") bytes, no shared-library dependencies"
-elif [ "${TORCHCLI_REQUIRE_STATIC:-0}" = 1 ]; then
-  fail "$BIN is not statically linked"
+# Release form: libtorch, libstdc++ and libgcc static; at most glibc's own libraries are shared (or nothing: fully static).
+needed="$(readelf -d "$BIN" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort | tr '\n' ' ')"
+foreign="$(printf '%s\n' $needed | grep -Ev '^(libc\.so\.6|libm\.so\.6|libpthread\.so\.0|libdl\.so\.2|librt\.so\.1|ld-linux.*\.so\.[0-9]+)$' || true)"
+if [ -z "$foreign" ]; then
+  if [ -z "$needed" ]; then form="fully static"; else form="glibc-only dynamic ($needed), needs glibc >= $(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)"; fi
+  ok "release form: $form, $(stat -c %s "$BIN") bytes"
+elif [ "${LMTORCH_REQUIRE_RELEASE:-0}" = 1 ]; then
+  fail "$BIN links non-glibc shared libraries: $foreign"
 else
-  echo "# note: $BIN is a dynamic development build (TORCHCLI_REQUIRE_STATIC=1 enforces the release form)"
+  echo "# note: $BIN is a development build linking $(echo $foreign | wc -w) non-glibc libraries (LMTORCH_REQUIRE_RELEASE=1 enforces the release form)"
 fi
 
 if [ -x "$UNIT" ]; then (cd "$WORK" && "$UNIT") || fail "C++ safetensors unit tests"; ok "C++ safetensors unit tests"; fi
@@ -69,13 +72,13 @@ mkdir -p "$WORK/negative"
 (cd "$WORK/negative" && "$LMSCRIPT" "$HERE/tests/dsl/negative.lms" "$BIN") > "$WORK/negative.log" || fail "refusal suite: $(cat "$WORK/negative.log")"
 ok "$(tail -1 "$WORK/negative.log")"
 # The two front ends share the safetensors reader: a BOOL artifact written by the DSL is a coded lmapi refusal.
-printf 'p = _dsl_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE/schema/torchcli.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
+printf 'p = _dsl_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
 "$LMSCRIPT" "$WORK/bools.lms" >/dev/null
 (cd "$WORK" && "$BIN" --dsl bools.dslb >/dev/null) || fail "writing a BOOL artifact"
 set +e; (cd "$WORK" && "$BIN" tensor_inspect --input bools.safetensors#tensor) > "$WORK/bools.json"; code=$?; set -e
 [ "$code" = 2 ] && grep -q '"tool_code": "INVALID_DTYPE"' "$WORK/bools.json" || fail "lmapi on a BOOL artifact: exit $code $(cat "$WORK/bools.json")"
 ok "a DSL-written BOOL artifact is a coded lmapi refusal (INVALID_DTYPE)"
-printf 'p = _dsl_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _dsl_\n' "$HERE/schema/torchcli.dsl.json" > "$WORK/illtyped.lms"
+printf 'p = _dsl_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _dsl_\n' "$HERE/schema/lmtorch.dsl.json" > "$WORK/illtyped.lms"
 set +e; "$LMSCRIPT" --check "$WORK/illtyped.lms" > "$WORK/illtyped.log" 2>&1; code=$?; set -e
 [ "$code" = 2 ] && grep -q 'illtyped.lms:2:' "$WORK/illtyped.log" || fail "ill-typed chunk: exit $code $(cat "$WORK/illtyped.log")"
 ok "an ill-typed chunk is a located compile error (exit 2) before anything runs"
@@ -116,4 +119,4 @@ if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, nu
 else
   echo "# skipped: PyTorch oracles (set ORACLE_PYTHON to a python with torch, safetensors and numpy)"
 fi
-echo "torchcli native tests: $pass passed"
+echo "lmtorch native tests: $pass passed"

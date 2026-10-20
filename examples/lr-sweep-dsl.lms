@@ -1,6 +1,6 @@
 # Multi-step task: choose a learning rate by sweeping, then train the winner longer and verify it on held-out points.
 #   1 sweep     the same DSL program is compiled once per candidate rate (${} makes the rate a literal) and every compiled
-#               program runs in ONE torchcli process; each reports its final loss under its own key
+#               program runs in ONE lmtorch process; each reports its final loss under its own key
 #   2 select    lmscript discards diverged runs (non-finite loss comes back as null) and picks the lowest final loss
 #   3 refine    train the winning rate for 5x the steps and save the model
 #   4 verify    reload the model, score a held-out grid, fail the run (exit 4) unless the error is small
@@ -17,7 +17,7 @@ files = [];
 for (i = 0; i < len(RATES); i = i + 1) {
   LR_MICRO = round(RATES[i] * 1000000);
   KEY = f"lr{i}";
-  sweep = _dsl_ schema="../schema/torchcli.dsl.json";
+  sweep = _dsl_ schema="../schema/lmtorch.dsl.json";
 torch.manual_seed(1);
 let x = torch.linspace(-1.0, 1.0, 64).reshape(64, 1);
 let y = (x * 3.0).sin();
@@ -55,7 +55,7 @@ println(f"2 select: lr {LR}");
 
 LR_MICRO = round(LR * 1000000);
 LONG = STEPS * 5;
-refine = _dsl_ schema="../schema/torchcli.dsl.json";
+refine = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 torch.manual_seed(1);
 let x = torch.linspace(-1.0, 1.0, 64).reshape(64, 1);
@@ -74,7 +74,7 @@ for (step in range(0, ${LONG})) {
 model.save(run + "/best.safetensors");
 end _dsl_
 
-verify = _dsl_ schema="../schema/torchcli.dsl.json";
+verify = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 torch.grad_enabled(false);
 let model = torch.load_model(run + "/best.safetensors");

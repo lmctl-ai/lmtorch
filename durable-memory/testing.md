@@ -3,11 +3,12 @@
 `./test.sh` is the native suite (about one minute on the dev build). In order:
 
 1. `scripts/sync-sdk.sh --verify` (vendored `dslvm.hpp` equals `sdk.lock`), and the compiler emits bytecode v5.
-2. Schema gates: `--dsl-schema --json` equals `schema/torchcli.dsl.json` byte for byte; `--dsl-signatures` equals
+2. Schema gates: `--dsl-schema --json` equals `schema/lmtorch.dsl.json` byte for byte; `--dsl-signatures` equals
    `lmscript --dsl-signatures`; the `--dsl-schema` summary lists every member; lmapi `--schema` equals `cli.schema.dev.json`.
-3. Static check: a statically linked binary must make `ldd` say "not a dynamic executable"; `TORCHCLI_REQUIRE_STATIC=1`
-   fails a dynamic build (release gate). The dev build only notes it.
-4. `torchcli_unit` (C++ safetensors reader/writer, malformed headers, modes, BOOL payload bytes).
+3. Release form: the binary's NEEDED libraries must be glibc's own (libc, libm, libpthread, libdl, librt, ld-linux) or
+   none; the gate prints the glibc floor. `LMTORCH_REQUIRE_RELEASE=1` (CI release jobs) fails anything else; a dev
+   build only notes it.
+4. `lmtorch_unit` (C++ safetensors reader/writer, malformed headers, modes, BOOL payload bytes).
 5. `tests/dsl/api.lms`: one DSL program with an `out.check` per behavior (137 checks: creation, operators incl. reversed
    forms, broadcasting, reductions, shapes, losses, autograd accumulation, RNG reproducibility, every layer kind through
    save/load_model, optimizer steps, bundles/CSV/files incl. BOM and CRLF, BOOL round trip, view write-through, live
@@ -27,10 +28,9 @@
    checked to six significant digits (0.886624/0.057287, R² 0.989220: the static build's BLAS-free GEMM changes the last
    float32 bits, so full-precision lmapi output differs between builds); every example
    passes `lmscript --check` (train-report.lms needs lmcreator and is skipped).
-9. With `ORACLE_PYTHON` (default `~/.cache/torchcli/oracle-venv/bin/python`): `tests/dsl_oracle.py` (seeded rand/randn/
+9. With `ORACLE_PYTHON` (default `~/.cache/lmtorch/oracle-venv/bin/python`): `tests/dsl_oracle.py` (seeded rand/randn/
    randint/randperm and nn.Linear/Conv2d init bit-identical to Python; Adam, SGD momentum, conv, softmax, GELU, losses
    within 1e-5; DSL-saved models load into Python nn.Sequential strictly and Python-saved ones through torch.load_model)
    and `tests/integration.py` (the original 12-operation oracle and 21 regression cases, now against the native binary).
 
-The docker CTest path (`scripts/build.sh test`, CI) is unchanged in intent: it configures with `TORCHCLI_PYTHON_TESTS=ON`
-to register integration.py and shim_test.py. It was not run on this host (no docker).
+CTest (`LMTORCH_PYTHON_TESTS=ON`) registers the unit test and integration.py; test.sh is the primary entry point.

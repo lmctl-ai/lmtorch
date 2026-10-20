@@ -1,6 +1,6 @@
 {
   "schema": "cli.schema.v1",
-  "tool": "torchcli",
+  "tool": "lmtorch",
   "version": "0.2.0",
   "inputs": [
     "flags",

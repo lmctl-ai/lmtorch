@@ -1,20 +1,20 @@
-# torchcli `_dsl_` API
+# lmtorch `_dsl_` API
 
-`schema/torchcli.dsl.json` is the contract (dsl.schema 2, bytecode v5). `torchcli --dsl-schema` prints this list grouped by
-type; `torchcli --dsl-schema --json` prints the exact schema bytes the compiler needs; `torchcli --dsl-signatures` prints
-the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatures schema/torchcli.dsl.json`.
+`schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5). `lmtorch --dsl-schema` prints this list grouped by
+type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs; `lmtorch --dsl-signatures` prints
+the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatures schema/lmtorch.dsl.json`.
 
 A program is an lmscript `_dsl_` block compiled to bytecode and run by the native host:
 
 ```lmscript
-prog = _dsl_ schema="../schema/torchcli.dsl.json";
+prog = _dsl_ schema="../schema/lmtorch.dsl.json";
 let x = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]").requires_grad(true);
 let loss = (x.matmul(x) + 1.0).square().mean();
 loss.backward();
 out.set("loss", loss.item()).set("grad", x.grad());
 end _dsl_
 savedsl(prog, "prog.dslb");
-r = system(["torchcli", "--dsl", "prog.dslb"]);   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
+r = system(["lmtorch", "--dsl", "prog.dslb"]);   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
 ```
 
 The language is the lmscript DSL (typed `let`, `if`/`else`, `switch`, `while`, `for (i in range(a, b))`, `for (x in list)`,
@@ -55,7 +55,7 @@ int (`float(${round(lr * 1000000)}) / 1000000.0`).
 | `sgd(Model, lr[, momentum])`, `sgd(TensorList, lr)` | Optimizer | `torch.optim.SGD` |
 | `adam(Model, lr)`, `adam(TensorList, lr)`, `adamw(Model, lr, weight_decay)` | Optimizer | `torch.optim.Adam` / `AdamW` defaults otherwise |
 | `mark()`, `release(mark)`, `live_tensors()` | int | handle lifetime, see below |
-| `version()` | string | `torchcli 0.3.0 (libtorch 2.9.1, CPU)` |
+| `version()` | string | `lmtorch 0.3.0 (libtorch 2.9.1, CPU)` |
 
 ## Tensor
 

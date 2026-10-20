@@ -1,12 +1,12 @@
 # _dsl_ version of tensor-chain.lms: the same ones -> matmul -> add -> softmax chain, written as one DSL program that
-# runs inside one torchcli process (the lmapi version spawns four processes and writes four artifacts).
-# Run: lmscript examples/tensor-chain-dsl.lms [run_dir]      (torchcli on PATH, or TORCHCLI_BIN)
+# runs inside one lmtorch process (the lmapi version spawns four processes and writes four artifacts).
+# Run: lmscript examples/tensor-chain-dsl.lms [run_dir]      (lmtorch on PATH, or LMTORCH_BIN)
 import "./lib/torchdsl.lms";
 
 RUN = ARGV.get(0, "artifacts/tensor-chain-dsl");
 mkdir(RUN, true);
 
-chain = _dsl_ schema="../schema/torchcli.dsl.json";
+chain = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let a = torch.ones(2, 2);
 let b = a.matmul(a);

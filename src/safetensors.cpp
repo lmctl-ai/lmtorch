@@ -1,4 +1,4 @@
-#include "torchcli/safetensors.hpp"
+#include "lmtorch/safetensors.hpp"
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-namespace torchcli {
+namespace lmtorch {
 using lmcpp::Error;
 using lmcpp::ErrorCode;
 using Json = lmcpp::Json;

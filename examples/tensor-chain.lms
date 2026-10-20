@@ -1,16 +1,16 @@
-import "../cli.schema.dev.json" as torchcli;
+import "../cli.schema.dev.json" as lmtorch;
 
 RUN = len(ARGV) > 0 ? ARGV[0] : "artifacts/tensor-chain";
 mkdir(RUN, true);
-a = torchcli.tensor_create({shape: [2, 2], fill: 1, out: path_join(RUN, "a.safetensors")});
+a = lmtorch.tensor_create({shape: [2, 2], fill: 1, out: path_join(RUN, "a.safetensors")});
 if (a.status == "error") { println(a.error.message); exit(1); }
 if (a.status == "simulated") { println("tensor-chain dry-run: values [0.5, 0.5, 0.5, 0.5]"); exit(0); }
-b = torchcli.tensor_matmul({a: a.result.ref, b: a.result.ref, out: path_join(RUN, "b.safetensors")});
+b = lmtorch.tensor_matmul({a: a.result.ref, b: a.result.ref, out: path_join(RUN, "b.safetensors")});
 if (b.status == "error") { println(b.error.message); exit(1); }
-c = torchcli.tensor_add({a: b.result.ref, b: a.result.ref, out: path_join(RUN, "c.safetensors")});
+c = lmtorch.tensor_add({a: b.result.ref, b: a.result.ref, out: path_join(RUN, "c.safetensors")});
 if (c.status == "error") { println(c.error.message); exit(1); }
-d = torchcli.tensor_softmax({input: c.result.ref, dim: 1, out: path_join(RUN, "d.safetensors")});
+d = lmtorch.tensor_softmax({input: c.result.ref, dim: 1, out: path_join(RUN, "d.safetensors")});
 if (d.status == "error") { println(d.error.message); exit(1); }
-e = torchcli.tensor_inspect({input: d.result.ref, limit: 32});
+e = lmtorch.tensor_inspect({input: d.result.ref, limit: 32});
 if (e.status == "error") { println(e.error.message); exit(1); }
 if (e.status == "ok") { println(e.result.values); }

@@ -23,7 +23,7 @@ CSV = path_join(RUN, "houses.csv");
 write_file(CSV, join(rows, "\n") + "\n");
 println(f"1 data: {len(rows) - 1} rows -> {CSV}");
 
-fit = _dsl_ schema="../schema/torchcli.dsl.json";
+fit = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let table = torch.read_csv(${CSV}, true);
 let x = table.slice(1, 0, 3);

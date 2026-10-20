@@ -1,13 +1,15 @@
 name: CI
 
-# Builds the test and runtime images from the hash-locked wheels (one hash per architecture), runs the full test image (CTest), the
-# secrets and schema gates and every recipe through the host shim, on arm64 and on amd64. torchcli was developed and measured on
-# aarch64; the amd64 job is the only amd64 verification (README "Build and test"). Nothing here publishes an image or a package.
-# torchcli has no documentation or notices gate yet (pycli's pattern); those steps are absent, not skipped silently.
+# Builds lmtorch on Linux arm64 and amd64 and runs ./test.sh:
+#   release  static CPU-only libtorch from source (cached by lock, build script, runner image and arch), static libstdc++ and
+#            libgcc, glibc shared; Ubuntu 22.04 runners set the glibc floor to 2.35
+#   dev      against the PyTorch wheel's shared libtorch (fast)
+# On a v* tag, the release job also publishes the stripped binaries and license texts as a GitHub Release.
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -17,102 +19,90 @@ permissions:
 
 env:
   LMCPP_REF: f6c6f51797912a369d6b27cf9e96f148a9a0e4d1
-  LMTS_REF: 31012f638613b74114b66bce01c99b8415248263
-  LMCTL_VERSION: 0.2.207   # the lmscript used for the recipe acceptance on the development host
+  LMCTL_VERSION: 0.2.347   # lmscript with DSL bytecode v5 (>= 0.2.346 required)
 
 jobs:
   build-and-test:
-    name: images, tests, recipes (${{ matrix.arch }})
+    name: ${{ matrix.mode }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-          - runner: ubuntu-24.04
-            arch: amd64
+          - { runner: ubuntu-22.04-arm, arch: arm64, mode: release }
+          - { runner: ubuntu-22.04, arch: x64, mode: release }
+          - { runner: ubuntu-22.04-arm, arch: arm64, mode: dev }
+          - { runner: ubuntu-22.04, arch: x64, mode: dev }
     steps:
-      - name: Checkout torchcli (as cppwrapper/pytorch, the layout docker/Dockerfile expects)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          path: cppwrapper/pytorch
+          path: lmtorch
       - name: Checkout pinned lmcpp
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: lmctl-ai/lmcpp
           ref: ${{ env.LMCPP_REF }}
-          path: lmctl-ai/lmcpp
-      - name: Checkout pinned lmts
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+          path: lmcpp
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af   # v4.1.0
         with:
-          repository: lmctl-ai/lmts
-          ref: ${{ env.LMTS_REF }}
-          path: lmts
-      - name: Host facts
+          node-version: '24.15'
+      - name: Tools
         run: |
-          uname -m; docker version --format '{{.Server.Version}} {{.Server.Arch}}'; python3 --version; df -h / | tail -1
-      - name: No secrets in tracked files
-        working-directory: cppwrapper/pytorch
-        run: python3 scripts/no-secrets.py
-      # Every gate after the test-image build runs even when an earlier gate failed (if: !cancelled() plus the outcome of the step it
-      # needs), so one run shows all results per architecture; a failed step still fails the job.
-      - name: Build the test image (libtorch 2.9.1+cpu from the ${{ matrix.arch }} wheel hash)
-        id: build_test
-        working-directory: cppwrapper/pytorch
-        run: LMCPP_DIR="$GITHUB_WORKSPACE/lmctl-ai/lmcpp" ./scripts/build.sh test
-      - name: Run the full test image (CTest)
-        id: ctest
-        if: ${{ !cancelled() && steps.build_test.outcome == 'success' }}
-        run: docker run --rm --pull=never --network=none torchcli:test
-      - name: Build the runtime image (torchcli:dev, the shim's image)
-        id: build_runtime
-        if: ${{ !cancelled() && steps.build_test.outcome == 'success' }}
-        working-directory: cppwrapper/pytorch
-        run: |
-          LMCPP_DIR="$GITHUB_WORKSPACE/lmctl-ai/lmcpp" ./scripts/build.sh runtime
-          docker builder prune -f > /dev/null; df -h / | tail -1
-      - name: Schema gate (runtime binary against the checked-in schema)
-        id: schema
-        if: ${{ !cancelled() && steps.build_runtime.outcome == 'success' }}
-        working-directory: cppwrapper/pytorch
-        run: |
-          docker run --rm --pull=never --network=none torchcli:dev --schema > published.json
-          python3 -c 'import json,sys; a=json.load(open("published.json")); b=json.load(open("cli.schema.dev.json")); sys.exit(0 if a==b else "cli.schema.dev.json is stale: regenerate with torchcli --schema")'
-      - name: Set up Bun
-        if: ${{ !cancelled() }}
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
-        with:
-          bun-version: 1.4.2
-      - name: Parse the published schema with lmts
-        if: ${{ !cancelled() }}
-        working-directory: lmts
-        run: |
-          bun -e 'import { readFileSync } from "node:fs"; import { parsePublishedSchema } from "./src/publish.ts"; const result = parsePublishedSchema(JSON.parse(readFileSync("../cppwrapper/pytorch/cli.schema.dev.json", "utf8"))); if (!result.ok) { console.error(result); process.exit(1); } console.log("lmts parsed torchcli schema");'
-      - name: Install lmscript (pinned @lmctl-ai/lmctl)
-        id: lmscript
-        if: ${{ !cancelled() && steps.build_runtime.outcome == 'success' }}
-        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nlohmann-json3-dev python3-venv file binutils
+          # PyTorch 2.9 needs CMake >= 3.27; Ubuntu 22.04 ships 3.22.
+          python3 -m pip install --user --quiet 'cmake==3.31.6' 'ninja==1.11.1.4' pyyaml typing_extensions
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           npm install -g "@lmctl-ai/lmctl@${LMCTL_VERSION}"
-          lmscript --version || true
-      - name: Run every recipe through the host shim (--check, --dry-run, real; the lmcreator recipe is skipped without that checkout)
-        id: recipes
-        if: ${{ !cancelled() && steps.lmscript.outcome == 'success' }}
-        working-directory: cppwrapper/pytorch
-        run: scripts/run-recipes.sh
-      - name: Image size report
-        if: ${{ !cancelled() && steps.build_test.outcome == 'success' }}
-        working-directory: cppwrapper/pytorch
+      - name: Secrets scan
+        run: python3 lmtorch/scripts/no-secrets.py
+      - name: Oracle venv (torch 2.9.1+cpu wheel; tests only, never shipped)
         run: |
-          images=torchcli:test; docker image inspect torchcli:dev > /dev/null 2>&1 && images="torchcli:dev torchcli:test"
-          { echo "## Image sizes (${{ matrix.arch }})"; python3 scripts/image-size-report.py $images; } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Gate summary
-        if: ${{ !cancelled() }}
+          python3 -m venv ~/.cache/lmtorch/oracle-venv
+          ~/.cache/lmtorch/oracle-venv/bin/pip install --quiet torch==2.9.1+cpu safetensors numpy --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Restore static libtorch
+        if: matrix.mode == 'release'
+        id: libtorch
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684   # v4.2.3
+        with:
+          path: ~/.cache/lmtorch/libtorch-static
+          key: libtorch-${{ matrix.runner }}-${{ hashFiles('lmtorch/libtorch.lock', 'lmtorch/scripts/build-libtorch.sh') }}
+      - name: Build static libtorch (cold cache only)
+        if: matrix.mode == 'release' && steps.libtorch.outputs.cache-hit != 'true'
+        run: LIBTORCH_JOBS=4 lmtorch/scripts/build-libtorch.sh
+      - name: Build lmtorch
+        env:
+          LMCPP_DIR: ${{ github.workspace }}/lmcpp
         run: |
-          { echo "## Gates (${{ matrix.arch }})"; echo "| gate | outcome |"; echo "|---|---|";
-            echo "| test image build | ${{ steps.build_test.outcome }} |"; echo "| CTest | ${{ steps.ctest.outcome }} |";
-            echo "| runtime build | ${{ steps.build_runtime.outcome }} |"; echo "| schema | ${{ steps.schema.outcome }} |"; echo "| recipes | ${{ steps.recipes.outcome }} |"; } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Clean builder cache and dangling images
-        if: always()
-        run: docker builder prune -f > /dev/null; docker image prune -f > /dev/null; df -h / | tail -1
+          if [ "${{ matrix.mode }}" = dev ]; then lmtorch/scripts/build-native.sh --dev; else lmtorch/scripts/build-native.sh; fi
+      - name: Test
+        run: |
+          if [ "${{ matrix.mode }}" = release ]; then export LMTORCH_REQUIRE_RELEASE=1 LMTORCH_BIN="$PWD/lmtorch/build/bin/lmtorch"; else export LMTORCH_BIN="$PWD/lmtorch/build-dev/bin/lmtorch"; fi
+          lmtorch/test.sh
+      - name: Package
+        if: matrix.mode == 'release'
+        run: lmtorch/scripts/package-release.sh lmtorch/build/bin/lmtorch "linux-${{ matrix.arch }}" dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2
+        if: matrix.mode == 'release'
+        with:
+          name: lmtorch-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release and attach the assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

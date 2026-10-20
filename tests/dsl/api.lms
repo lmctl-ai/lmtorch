@@ -1,8 +1,8 @@
 # API semantics: one DSL program with an out.check per behavior; any failure exits 4 naming the check.
-# Usage: lmscript tests/dsl/api.lms OUT.dslb [work_dir]   then   torchcli --dsl OUT.dslb   (cwd must contain work_dir)
+# Usage: lmscript tests/dsl/api.lms OUT.dslb [work_dir]   then   lmtorch --dsl OUT.dslb   (cwd must contain work_dir)
 OUT = ARGV.get(0, "build/api.dslb");
 WORK = ARGV.get(1, "dsl-api-work");
-api = _dsl_ schema="../../schema/torchcli.dsl.json";
+api = _dsl_ schema="../../schema/lmtorch.dsl.json";
 let work = ${WORK};
 fn near(a: float, b: float) -> bool { return abs(a - b) < 0.000001; }
 fn same(a: Tensor, b: string) -> bool { return a.to_json() == b; }

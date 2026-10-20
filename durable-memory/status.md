@@ -1,44 +1,39 @@
-# torchcli status and hand-off (2026-10-20)
+# lmtorch status and hand-off (2026-10-20)
+
+Formerly `torchcli` in the private lmctlhq/torchcli. Renamed to lmtorch (binary, schemas, docs, env vars `LMTORCH_*`,
+cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmtorch. The safetensors metadata key
+`torchcli_format` is a file-format key and keeps its name so existing checkpoints stay readable.
 
 ## State
 - One C++17 binary, two front ends. lmapi: the original 12 operations (lmcpp, `--schema` byte-identical to
-  `cli.schema.dev.json`). DSL: `torchcli --dsl prog.dslb` runs lmscript `_dsl_` bytecode (v5, cpp-dsl-sdk VM pinned in
-  `sdk.lock`) against `schema/torchcli.dsl.json`: 218 signatures over Torch/Tensor/TensorList/StrList/Bundle/Model/
-  Optimizer/Out (`docs/dsl-api.md`, decisions in dsl-host.md).
-- Native build without docker or Python at run time: `scripts/build-libtorch.sh` (static CPU-only libtorch 2.9.1 from
-  source, `libtorch.lock`) then `scripts/build-native.sh` (fully static). `scripts/build-native.sh --dev` builds against the
-  PyTorch wheel. See native-build.md.
-- `examples/`: the four lmapi recipes plus a `-dsl` version of each (same numbers: mlp 0.886624 → 0.057287, train-report
-  R² 0.989220) and five multi-step DSL tasks (classify-moons, lr-sweep, checkpoint-resume, cnn-bars, regression-csv);
-  `examples/lib/torchdsl.lms` is the compile-and-run helper. Index: `examples/README.md`.
-- Tests: `./test.sh` (testing.md): 27 gates (26 on a dynamic dev build) including 137 DSL API checks, 60 refusal cases, every
-  example, and two PyTorch oracles (DSL: RNG and init bit-identical to Python, training within 1e-5, model files
-  interchangeable; lmapi: the original 12-operation oracle, now native). All green on both builds (2026-10-20).
-- Bugs fixed this round: an lmcpp::Error thrown inside a DSL call (path containment in read_csv/write_text) aborted the
-  process (not a std::exception); the safetensors temp-file error now names the path and errno; integration.py accepts a
-  static binary (ldd exits 1), and so does test.sh's own static gate (pipefail); docker staging (`scripts/build.sh`) now copies `schema/`, `third_party/`, `sdk.lock`, and the
-  Dockerfile enables `TORCHCLI_PYTHON_TESTS` so its CTest keeps the integration and shim tests.
-- Second round (2026-10-20, each with a regression test): `torch.tensor("[3, [1, 2]]")` was accepted and returned
-  uninitialized memory (a scalar before a list escaped the ragged check; all scalars must now share the final depth and
-  their count must equal the shape); the shared safetensors reader accepted BOOL bytes other than 0/1 (now
-  INVALID_ARTIFACT for both front ends); `torch.grad_enabled(false)` in one file silently disabled autograd in later files
-  of the same `--dsl` run (grad mode is reset per file; the RNG still continues); saving a parameterless model said
-  "put() at least one tensor"; an unknown layer with arguments in saved metadata reported an argument count instead of
-  "unknown layer"; CSV files with a UTF-8 byte-order mark failed to parse.
-- Static release binary: DONE on aarch64 Linux (2026-10-20): `build/bin/torchcli`, 185 MB (122 MB stripped), statically
-  linked, no shared-library dependencies; `TORCHCLI_REQUIRE_STATIC=1 ./test.sh` passes all 27 gates, including both
-  PyTorch oracles. amd64 static is untested (native.yml would cover it).
+  `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --dsl prog.dslb` runs lmscript `_dsl_` bytecode (v5,
+  cpp-dsl-sdk VM pinned in `sdk.lock`) against `schema/lmtorch.dsl.json`: 218 signatures (`docs/dsl-api.md`, decisions in
+  dsl-host.md).
+- Build: `scripts/build-libtorch.sh` (static CPU-only libtorch 2.9.1 from source) then `scripts/build-native.sh`. Release
+  form (owner decision 2026-10-20): libtorch, libstdc++ and libgcc static, glibc shared, so no LGPL relinking materials are
+  needed and a release is the binary plus license texts. `LMTORCH_FULL_STATIC=ON` still links glibc statically.
+  Docker, the host shim, wheel locks and the docker CI were removed the same day.
+- Distribution: GitHub Releases only (no npm). `.github/workflows/ci.yml` builds release and dev forms on ubuntu-22.04
+  and ubuntu-22.04-arm (glibc floor 2.35) and runs test.sh; a `v*` tag runs `scripts/package-release.sh` and attaches
+  `lmtorch-linux-{x64,arm64}`, `.tar.gz` (binary + LICENSE + THIRD_PARTY_NOTICES.md + licenses/) and `.sha256`.
+- License: MIT (`LICENSE`, byte-identical to lmcpp/lmrust/lmcad, sha256 949eb9b7...). No Rust is involved.
+- `examples/`: three lmapi recipes plus a `-dsl` version of each, train-report-dsl (its lmapi original was removed: it needed
+  the private lmcreator), and five multi-step DSL tasks.
+- Tests: `./test.sh` (testing.md): 27 gates on a release build, 26 on a dev build; all green locally on both
+  (2026-10-20, aarch64: glibc-only dynamic, needs glibc >= 2.38 when built on Ubuntu 24.04).
+- CI evidence: in the private repo, run 39412874928 passed test.sh for the dev form on amd64 and arm64 (first amd64
+  confirmation); its static jobs were cancelled to save private-repo minutes. The release form has not run in CI yet.
+- Bugs fixed (all with regression tests): see the commit history of 2026-10-20 and testing.md (ragged literals reading
+  uninitialized memory, uncaught lmcpp::Error aborting the process, BOOL payload bytes, grad mode leaking across files,
+  CSV byte-order marks, and several error messages).
 
-## Not done / open
-- CI: `.github/workflows/native.yml` (static with libtorch cache + dev, arm64/amd64, running test.sh) is written but has
-  never run; the docker CI (`ci.yml`) was not re-run after the CMake changes (no docker on this host).
-- No BLAS: GEMM is ATen's portable kernel. A static OpenBLAS would speed up larger models; linalg/LAPACK ops are absent.
-- macOS/Windows native builds are not attempted (libtorch static on those platforms is untested here).
-- Licensing: repo is PRIVATE with no LICENSE. The static binary contains libtorch (BSD-3) and its bundled third-party code,
-  glibc (LGPL-2.1+, static: relinking materials as lmcad ships them would be needed before redistribution) and the GCC
-  runtime (GPLv3 + runtime exception). `THIRD_PARTY_NOTICES.md` lists what is linked; the go-public decision is the owner's.
-- Nothing is committed or published by this round unless the owner asks.
+## Pending
+- Move to public lmctl-ai/lmtorch: owner chose "transfer after audit" (2026-10-20). History audit findings are reported
+  to the owner; transfer of lmctlhq/torchcli and the visibility change happen only after the owner's explicit go. After
+  the transfer, update the git remote and README links (already written for lmctl-ai/lmtorch).
+- First CI run of the release form (cold libtorch build) and the first `v*` release.
+- No BLAS (portable GEMM; no linalg); macOS/Windows not attempted.
 
 ## Rules that apply
-- Commit identity Mike Ma <mike.ma@lmctl.com>, one Co-Authored-By per contributing model, explicit `git add`, push after every commit. Staging/deployment belongs to another team.
-- Private repo: verify locally; gate any paid macOS/Windows CI legs with `github.event.repository.private == false`.
+- Commit identity Mike Ma <mike.ma@lmctl.com>, one Co-Authored-By per contributing model, explicit `git add`, push after every commit.
+- Transfers and visibility changes are operator-approved actions, never done on an agent's own initiative.

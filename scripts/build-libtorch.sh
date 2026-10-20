@@ -2,13 +2,13 @@
 # Build a static, CPU-only, Python-free libtorch (ATen + c10 + autograd) from the pinned PyTorch source tag.
 # Python is a build-time code generator here (torchgen); nothing Python is linked or shipped.
 # Defaults keep the multi-hour build outside the repository so `rm -rf build` never discards it:
-#   LIBTORCH_SRC=~/.cache/torchcli/pytorch-src  LIBTORCH_BUILD=~/.cache/torchcli/libtorch-build
-#   LIBTORCH_PREFIX=~/.cache/torchcli/libtorch-static  LIBTORCH_JOBS=3
+#   LIBTORCH_SRC=~/.cache/lmtorch/pytorch-src  LIBTORCH_BUILD=~/.cache/lmtorch/libtorch-build
+#   LIBTORCH_PREFIX=~/.cache/lmtorch/libtorch-static  LIBTORCH_JOBS=3
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG="$(sed -n 's/^tag=//p' "$HERE/libtorch.lock")"
 COMMIT="$(sed -n 's/^commit=//p' "$HERE/libtorch.lock")"
-CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/torchcli"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/lmtorch"
 SRC="${LIBTORCH_SRC:-$CACHE/pytorch-src}"
 BUILD="${LIBTORCH_BUILD:-$CACHE/libtorch-build}"
 PREFIX="${LIBTORCH_PREFIX:-$CACHE/libtorch-static}"
@@ -48,5 +48,14 @@ cmake --install "$BUILD"
 # The static install omits several archives the static link needs; copy every archive the build produced.
 mkdir -p "$PREFIX/lib"
 find "$BUILD/lib" -maxdepth 1 -name '*.a' -exec cp -p {} "$PREFIX/lib/" \;
+# License texts of every component the executable links, kept with the cached prefix for release packaging.
+mkdir -p "$PREFIX/licenses"
+for pair in "LICENSE:pytorch-LICENSE" "NOTICE:pytorch-NOTICE" "third_party/onnx/LICENSE:onnx-LICENSE" \
+            "third_party/protobuf/LICENSE:protobuf-LICENSE" "third_party/sleef/LICENSE.txt:sleef-LICENSE" \
+            "third_party/cpuinfo/LICENSE:cpuinfo-LICENSE" "third_party/fmt/LICENSE:fmt-LICENSE" \
+            "third_party/miniz-3.0.2/LICENSE:miniz-LICENSE" "third_party/pocketfft/LICENSE.md:pocketfft-LICENSE" \
+            "third_party/nlohmann/LICENSE.MIT:nlohmann-json-LICENSE"; do
+  cp "$SRC/${pair%%:*}" "$PREFIX/licenses/${pair##*:}"
+done
 git -C "$SRC" rev-parse HEAD > "$PREFIX/SOURCE_COMMIT"
 echo "static libtorch installed at $PREFIX"

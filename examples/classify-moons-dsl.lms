@@ -4,7 +4,7 @@
 #   3 evaluate  reload the model with torch.load_model, score the held-out split, confusion counts
 #      lmscript: below the target accuracy, retrain with twice the epochs (at most three attempts)
 #   4 predict   classify a grid of points chosen by lmscript; lmscript draws the decision regions as text
-# Each step is a separate torchcli process that hands its results to the next through safetensors files in the run directory.
+# Each step is a separate lmtorch process that hands its results to the next through safetensors files in the run directory.
 # Run: lmscript examples/classify-moons-dsl.lms [run_dir] [seed]
 import "./lib/torchdsl.lms";
 
@@ -13,7 +13,7 @@ SEED = num(ARGV.get(1, "7"));
 TARGET = 0.95;
 mkdir(RUN, true);
 
-prepare = _dsl_ schema="../schema/torchcli.dsl.json";
+prepare = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 torch.manual_seed(${SEED});
 let n = 200;
@@ -49,7 +49,7 @@ attempt = 0;
 best = null;
 while (attempt < 3) {
   attempt = attempt + 1;
-  train = _dsl_ schema="../schema/torchcli.dsl.json";
+  train = _dsl_ schema="../schema/lmtorch.dsl.json";
   let run = ${RUN};
   let data = torch.open(run + "/data.safetensors");
   let x = data.get("x_train");
@@ -83,7 +83,7 @@ while (attempt < 3) {
   out.set("parameters", model.num_parameters()).set("architecture", model.summary());
 end _dsl_
 
-  evaluate = _dsl_ schema="../schema/torchcli.dsl.json";
+  evaluate = _dsl_ schema="../schema/lmtorch.dsl.json";
   let run = ${RUN};
   let model = torch.load_model(run + "/model.safetensors").eval();
   torch.grad_enabled(false);
@@ -99,7 +99,7 @@ end _dsl_
 
   savedsl(train, path_join(RUN, "train.dslb"));
   savedsl(evaluate, path_join(RUN, "evaluate.dslb"));
-  # Steps 2 and 3 run as two files in one torchcli process: loaded and verified together, executed in order.
+  # Steps 2 and 3 run as two files in one lmtorch process: loaded and verified together, executed in order.
   res = torchdsl.run([path_join(RUN, "train.dslb"), path_join(RUN, "evaluate.dslb")]);
   println(sprintf("2 train (attempt %d, %d epochs): final epoch loss %.4f, train accuracy %.3f", attempt, EPOCHS, res.epoch_loss[len(res.epoch_loss) - 1], res.train_accuracy));
   println(sprintf("3 evaluate: test accuracy %.3f (tp %d, fn %d, fp %d, tn %d)", res.test_accuracy, res.true_pos, res.false_neg, res.false_pos, res.true_neg));
@@ -123,7 +123,7 @@ for (r = 0; r < ROWS; r = r + 1) {
   }
 }
 GRID_JSON = json_stringify(GRID);
-predict = _dsl_ schema="../schema/torchcli.dsl.json";
+predict = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let model = torch.load_model(run + "/model.safetensors").eval();
 torch.grad_enabled(false);

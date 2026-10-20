@@ -9,7 +9,7 @@ import "./lib/torchdsl.lms";
 RUN = ARGV.get(0, "artifacts/cnn-bars-dsl");
 mkdir(RUN, true);
 
-train = _dsl_ schema="../schema/torchcli.dsl.json";
+train = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 torch.manual_seed(3);
 
@@ -74,7 +74,7 @@ for (pic in PICTURES) {
   push(BATCH, [rows]);
 }
 BATCH_JSON = json_stringify(BATCH);
-classify = _dsl_ schema="../schema/torchcli.dsl.json";
+classify = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 torch.grad_enabled(false);
 let model = torch.load_model(run + "/cnn.safetensors").eval();

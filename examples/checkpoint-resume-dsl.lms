@@ -1,7 +1,7 @@
 # Multi-step task: interrupted training must resume exactly. Run A trains 40 steps without stopping; run B trains 20
 # steps, saves the model, and a second program (a later process in a real job) reloads it and trains 20 more. With plain
 # SGD the optimizer carries no state, so B's weights must equal A's; a third program compares the two checkpoints.
-# Also shows a single torchcli process running several bytecode files in order (B1 and B2 share nothing but files).
+# Also shows a single lmtorch process running several bytecode files in order (B1 and B2 share nothing but files).
 # Run: lmscript examples/checkpoint-resume-dsl.lms [run_dir]
 import "./lib/torchdsl.lms";
 
@@ -9,7 +9,7 @@ RUN = ARGV.get(0, "artifacts/checkpoint-resume-dsl");
 mkdir(RUN, true);
 
 
-straight = _dsl_ schema="../schema/torchcli.dsl.json";
+straight = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 torch.manual_seed(5);
 let x = torch.randn(64, 3);
@@ -29,7 +29,7 @@ for (step in range(0, 40)) {
 model.save(run + "/a-40.safetensors");
 end _dsl_
 
-first_half = _dsl_ schema="../schema/torchcli.dsl.json";
+first_half = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let data = torch.open(run + "/data.safetensors");
 let model = torch.load_model(run + "/init.safetensors");
@@ -44,7 +44,7 @@ for (step in range(0, 20)) {
 model.save(run + "/b-20.safetensors");
 end _dsl_
 
-second_half = _dsl_ schema="../schema/torchcli.dsl.json";
+second_half = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let data = torch.open(run + "/data.safetensors");
 let model = torch.load_model(run + "/b-20.safetensors");
@@ -59,7 +59,7 @@ for (step in range(0, 20)) {
 model.save(run + "/b-40.safetensors");
 end _dsl_
 
-compare = _dsl_ schema="../schema/torchcli.dsl.json";
+compare = _dsl_ schema="../schema/lmtorch.dsl.json";
 let run = ${RUN};
 let a = torch.open(run + "/a-40.safetensors");
 let b = torch.open(run + "/b-40.safetensors");

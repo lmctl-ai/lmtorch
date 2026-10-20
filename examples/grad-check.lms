@@ -1,14 +1,14 @@
-import "../cli.schema.dev.json" as torchcli;
+import "../cli.schema.dev.json" as lmtorch;
 
 RUN = len(ARGV) > 0 ? ARGV[0] : "artifacts/grad-check";
 mkdir(RUN, true);
-x = torchcli.tensor_create({shape: [3], values: [1, -2, 3], out: path_join(RUN, "x.safetensors")});
+x = lmtorch.tensor_create({shape: [3], values: [1, -2, 3], out: path_join(RUN, "x.safetensors")});
 if (x.status == "error") { println(x.error.message); exit(1); }
 if (x.status == "simulated") { println("grad-check dry-run: dx [2, -4, 6]"); exit(0); }
-g = torchcli.autograd_grad({input: x.result.ref, "function": "sum_square", out: path_join(RUN, "dx.safetensors")});
+g = lmtorch.autograd_grad({input: x.result.ref, "function": "sum_square", out: path_join(RUN, "dx.safetensors")});
 if (g.status == "error") { println(g.error.message); exit(1); }
 if (g.status == "ok") {
-  d = torchcli.tensor_inspect({input: g.result.dx.ref, limit: 32});
+  d = lmtorch.tensor_inspect({input: g.result.dx.ref, limit: 32});
   if (d.status == "error") { println(d.error.message); exit(1); }
   if (d.status == "ok") {
     if (len(d.result.values) != 3 || d.result.values[0] != 2 || d.result.values[1] != -4 || d.result.values[2] != 6 || g.result.loss != 14) { println("gradient check failed"); exit(1); }

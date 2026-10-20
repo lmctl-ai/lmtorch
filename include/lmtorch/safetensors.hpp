@@ -4,7 +4,7 @@
 #include <string>
 #include <map>
 #include <vector>
-namespace torchcli {
+namespace lmtorch {
 struct TensorData { std::string dtype; std::vector<int64_t> shape; std::vector<uint8_t> bytes; };
 struct TensorBundle { std::map<std::string, TensorData> tensors; std::map<std::string, std::string> metadata; };
 struct TensorRef { std::string path, key; };

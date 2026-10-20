@@ -1,8 +1,8 @@
-# The `_dsl_` host (torchcli --dsl)
+# The `_dsl_` host (lmtorch --dsl)
 
-What it is: torchcli embeds the cpp-dsl-sdk VM (`third_party/dslvm/dslvm.hpp`, pinned by `sdk.lock`, same header hash as
-lmcad/lmhtml) and binds `schema/torchcli.dsl.json` to libtorch in `src/dsl_host.cpp`. lmscript compiles `_dsl_` blocks
-against that schema (`savedsl`); `torchcli --dsl A.dslb [B.dslb ...]` runs them. API reference: `docs/dsl-api.md`.
+What it is: lmtorch embeds the cpp-dsl-sdk VM (`third_party/dslvm/dslvm.hpp`, pinned by `sdk.lock`, same header hash as
+lmcad/lmhtml) and binds `schema/lmtorch.dsl.json` to libtorch in `src/dsl_host.cpp`. lmscript compiles `_dsl_` blocks
+against that schema (`savedsl`); `lmtorch --dsl A.dslb [B.dslb ...]` runs them. API reference: `docs/dsl-api.md`.
 Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--dsl-signatures` parity, one JSON line).
 
 ## Decisions (2026-10-20)
@@ -26,14 +26,14 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--ds
   lmcpp::Error, bad_alloc, std::exception and unknown exceptions into located `RUN_HOST` errors.
   Bug found by tests/dsl/negative.lms: lmcpp::Error is not a std::exception, and an uncaught one aborted the process
   (read_csv outside cwd). The wrapper catches it now.
-- **Files stay inside the working directory** (`torchcli::check_contained`, the lmapi rule) and DSL saves replace
+- **Files stay inside the working directory** (`lmtorch::check_contained`, the lmapi rule) and DSL saves replace
   atomically (rename), unlike the lmapi operations' exclusive link() writes. Re-runnable scripts need replacement.
 - **Models are `torch::nn::Sequential`.** State dict names equal PyTorch's (`0.weight`). `Model.save` stores
   `torchcli_format=model-1` and `layers=<summary>`; `torch.load_model` replays that spec through the same `add_layer`
   used by the builder methods, so the summary text is a format: change it only together with `replay_layers`.
 - **RNG is the default CPU generator**: `torch.manual_seed(s); torch.rand(...)` equals Python, and equals the lmapi
   `tensor_rand` (which seeds a fresh generator per call), so ported recipes reproduce their old numbers exactly.
-- **Result protocol:** exactly one stdout line for the whole invocation (lmcad prints one per file; torchcli does not), the
+- **Result protocol:** exactly one stdout line for the whole invocation (lmcad prints one per file; lmtorch does not), the
   `out` object accumulated across files. All files are loaded and verified before any runs (lmhtml rule).
 - **Per-file state:** grad mode is reset to enabled before each file of a multi-file run; the RNG, thread count and `out`
   object carry over (a later file continues the random stream).

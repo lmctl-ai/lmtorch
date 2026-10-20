@@ -1,27 +1,27 @@
-import "../cli.schema.dev.json" as torchcli;
+import "../cli.schema.dev.json" as lmtorch;
 
 RUN = len(ARGV) > 0 ? ARGV[0] : "artifacts/mlp-train";
 mkdir(RUN, true);
-w1 = torchcli.tensor_rand({shape: [4, 2], seed: 11, out: path_join(RUN, "w1.safetensors")});
+w1 = lmtorch.tensor_rand({shape: [4, 2], seed: 11, out: path_join(RUN, "w1.safetensors")});
 if (w1.status == "error") { println(w1.error.message); exit(1); }
 if (w1.status == "simulated") { println("mlp-train dry-run: 20 SGD steps then forward"); exit(0); }
-b1 = torchcli.tensor_rand({shape: [4], seed: 12, out: path_join(RUN, "b1.safetensors")});
+b1 = lmtorch.tensor_rand({shape: [4], seed: 12, out: path_join(RUN, "b1.safetensors")});
 if (b1.status == "error") { println(b1.error.message); exit(1); }
-w2 = torchcli.tensor_rand({shape: [1, 4], seed: 13, out: path_join(RUN, "w2.safetensors")});
+w2 = lmtorch.tensor_rand({shape: [1, 4], seed: 13, out: path_join(RUN, "w2.safetensors")});
 if (w2.status == "error") { println(w2.error.message); exit(1); }
-b2 = torchcli.tensor_rand({shape: [1], seed: 14, out: path_join(RUN, "b2.safetensors")});
+b2 = lmtorch.tensor_rand({shape: [1], seed: 14, out: path_join(RUN, "b2.safetensors")});
 if (b2.status == "error") { println(b2.error.message); exit(1); }
-ckpt = torchcli.tensor_save({tensors: {w1: w1.result.ref, b1: b1.result.ref, w2: w2.result.ref, b2: b2.result.ref}, metadata: {torchcli_format: "1", arch: "mlp_relu_v1", step: "0"}, out: path_join(RUN, "checkpoint_00.safetensors")});
+ckpt = lmtorch.tensor_save({tensors: {w1: w1.result.ref, b1: b1.result.ref, w2: w2.result.ref, b2: b2.result.ref}, metadata: {torchcli_format: "1", arch: "mlp_relu_v1", step: "0"}, out: path_join(RUN, "checkpoint_00.safetensors")});
 if (ckpt.status == "error") { println(ckpt.error.message); exit(1); }
-x = torchcli.tensor_create({shape: [4, 2], values: [0,0, 0,1, 1,0, 1,1], out: path_join(RUN, "x.safetensors")});
+x = lmtorch.tensor_create({shape: [4, 2], values: [0,0, 0,1, 1,0, 1,1], out: path_join(RUN, "x.safetensors")});
 if (x.status == "error") { println(x.error.message); exit(1); }
-y = torchcli.tensor_create({shape: [4, 1], values: [0,1,1,2], out: path_join(RUN, "y.safetensors")});
+y = lmtorch.tensor_create({shape: [4, 1], values: [0,1,1,2], out: path_join(RUN, "y.safetensors")});
 if (y.status == "error") { println(y.error.message); exit(1); }
 first = null;
 last = null;
 checkpoint = ckpt.result.path;
 for (i = 1; i <= 20; i = i + 1) {
-  next = torchcli.mlp_train_step({checkpoint: checkpoint, input: x.result.ref, target: y.result.ref, lr: 0.05, out: path_join(RUN, sprintf("checkpoint_%02d.safetensors", i))});
+  next = lmtorch.mlp_train_step({checkpoint: checkpoint, input: x.result.ref, target: y.result.ref, lr: 0.05, out: path_join(RUN, sprintf("checkpoint_%02d.safetensors", i))});
   if (next.status == "error") { println(next.error.message); exit(1); }
   if (next.status == "ok") {
     if (i == 1) { first = next.result.loss; }
@@ -30,6 +30,6 @@ for (i = 1; i <= 20; i = i + 1) {
   }
 }
 if (first == null || last == null || last >= first) { println("training loss did not decrease:", first, last); exit(1); }
-forward = torchcli.mlp_forward({checkpoint: checkpoint, input: x.result.ref, out: path_join(RUN, "prediction.safetensors")});
+forward = lmtorch.mlp_forward({checkpoint: checkpoint, input: x.result.ref, out: path_join(RUN, "prediction.safetensors")});
 if (forward.status == "error") { println(forward.error.message); exit(1); }
 if (forward.status == "ok") { println("loss first:", first, "last:", last, "prediction:", forward.result.ref); }
