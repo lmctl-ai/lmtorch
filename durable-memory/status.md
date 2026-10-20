@@ -23,8 +23,10 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   the private lmcreator), and five multi-step DSL tasks.
 - Tests: `./test.sh` (testing.md): 27 gates on a release build, 26 on a dev build; all green locally on both
   (2026-10-20, aarch64: glibc-only dynamic, needs glibc >= 2.38 when built on Ubuntu 24.04).
-- CI evidence: in the private repo, run 39412874928 passed test.sh for the dev form on amd64 and arm64 (first amd64
-  confirmation); its static jobs were cancelled to save private-repo minutes. The release form has not run in CI yet.
+- CI evidence (public repo): runs 39418714985 and 39423349623 passed all four jobs (release and dev, x64 and arm64), with
+  both PyTorch oracle suites running; the libtorch caches for both runners are saved, so a release run takes minutes.
+- Released: v0.3.0 (2026-10-20, run 39447192609): `lmtorch-linux-{x64,arm64}` (147 MB / 123 MB stripped), `.tar.gz`,
+  `.sha256`. Smoke-tested on aarch64: checksum OK, `--dsl-schema --json` byte-identical, checkpoint-resume-dsl correct.
 - Bugs fixed (all with regression tests): see the commit history of 2026-10-20 and testing.md (ragged literals reading
   uninitialized memory, uncaught lmcpp::Error aborting the process, BOOL payload bytes, grad mode leaking across files,
   CSV byte-order marks, and several error messages).
@@ -34,10 +36,10 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   published npm lmscript 0.2.347 predates it (28 gates, cli= skipped).
 
 ## Pending
-- First CI run of the release form (cold libtorch build) and the first `v*` release.
 - Switch the examples from `schema=` to `cli="lmtorch"` once an lmscript release contains R42.
 - No BLAS (portable GEMM; no linalg); macOS/Windows not attempted.
 
 ## Rules that apply
 - Commit identity Mike Ma <mike.ma@lmctl.com>, one Co-Authored-By per contributing model, explicit `git add`, push after every commit.
 - Transfers and visibility changes are operator-approved actions, never done on an agent's own initiative.
+- Owner standing permission (2026-10-20): push, tag and publish GitHub Releases without asking.
