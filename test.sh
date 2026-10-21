@@ -181,9 +181,9 @@ done
 ok "every example passes lmscript --check"
 
 if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, numpy' 2>/dev/null; then
-  "$ORACLE_PYTHON" tests/dsl_oracle.py "$BIN" "$LMSCRIPT_PY" > "$WORK/oracle.log" 2>&1 || fail "DSL oracle: $(tail -20 "$WORK/oracle.log")"
+  "$ORACLE_PYTHON" tests/dsl_oracle.py "$BIN" "$LMSCRIPT_PY" > "$WORK/oracle.log" 2>&1 || fail "DSL oracle: $(tail -60 "$WORK/oracle.log")"
   ok "$(tail -1 "$WORK/oracle.log")"
-  [ -x "$UNIT" ] && { "$ORACLE_PYTHON" tests/integration.py "$BIN" "$UNIT" tests/torch_oracle.py > "$WORK/integration.log" 2>&1 || fail "lmapi oracle: $(tail -20 "$WORK/integration.log")"; ok "lmapi 12-operation Torch oracle and 21 regression cases"; }
+  [ -x "$UNIT" ] && { "$ORACLE_PYTHON" tests/integration.py "$BIN" "$UNIT" tests/torch_oracle.py > "$WORK/integration.log" 2>&1 || fail "lmapi oracle: $(tail -60 "$WORK/integration.log")"; ok "lmapi 12-operation Torch oracle and 21 regression cases"; }
 else
   echo "# skipped: PyTorch oracles (set ORACLE_PYTHON to a python with torch, safetensors and numpy; PyTorch publishes no torch 2.9.1 wheel for macOS x86_64)"
 fi

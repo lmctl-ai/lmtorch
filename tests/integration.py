@@ -30,7 +30,7 @@ def approx(path, name, expected):
     actual = load_file(path, device="cpu")[name]
     assert torch.allclose(actual, expected, rtol=1e-5, atol=1e-6), (actual, expected)
 
-with tempfile.TemporaryDirectory(prefix="lmtorch-test-") as d:
+with tempfile.TemporaryDirectory(prefix="lmtorch-test-", ignore_cleanup_errors=True) as d:  # Windows: mmapped safetensors
     active_cwd=d
     paths = {name: os.path.join(d, name + ".safetensors") for name in (
         "a", "b", "mm", "sum", "soft", "linear", "lininput", "packed", "loaded", "grad",
@@ -157,7 +157,7 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-test-") as d:
     assert load_file(exact_i64)["tensor"].item()==9007199254740993
     rejected("VALIDATION_ERROR","tensor_softmax","--input",paths["a"]+"#tensor","--dim",9223372036854775808,"--out",os.path.join(d,"bad-dim.safetensors"))
     rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out","../lmtorch-escape.safetensors")
-    with tempfile.TemporaryDirectory(prefix="lmtorch-outside-") as outside:
+    with tempfile.TemporaryDirectory(prefix="lmtorch-outside-", ignore_cleanup_errors=True) as outside:
         os.symlink(outside,os.path.join(d,"escape"),target_is_directory=True)
         rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out",os.path.join(d,"escape","symlink-out.safetensors"))
         external=os.path.join(outside,"external.safetensors");save_file({"tensor":torch.ones(1)},external)

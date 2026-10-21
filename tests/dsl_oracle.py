@@ -66,7 +66,9 @@ def close(name, actual, expected, tol=1e-5):
     else:
         assert torch.allclose(a.to(torch.float64), e.to(torch.float64), rtol=tol, atol=tol), (name, a, e)
 
-with tempfile.TemporaryDirectory(prefix="lmtorch-oracle-") as d:
+# ignore_cleanup_errors: on Windows safetensors keeps loaded files memory-mapped (and d is the cwd), so they cannot be
+# deleted while the process runs.
+with tempfile.TemporaryDirectory(prefix="lmtorch-oracle-", ignore_cleanup_errors=True) as d:
     os.chdir(d)
     # A Python-trained model saved with lmtorch's metadata must load through torch.load_model.
     torch.manual_seed(99)
