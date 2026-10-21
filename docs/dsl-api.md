@@ -128,7 +128,9 @@ each file has its own DSL locals, so files hand tensors to each other through sa
 ## Files
 
 Every path is relative to, and must stay inside, the working directory (symlinks are resolved; `..` escapes and
-absolute paths elsewhere are refused). DSL saves replace an existing file atomically (temporary file, then rename).
+absolute paths elsewhere are refused; on Windows the comparison ignores case, and alternate data streams, device names
+such as `CON` and names ending in a dot or space are refused). DSL saves replace an existing file atomically (temporary
+file, then rename; `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH` on Windows).
 Formats: safetensors (F32, F64, I64, BOOL; header ≤ 1 MiB, file ≤ 256 MiB), CSV, text.
 
 ## Handle lifetime

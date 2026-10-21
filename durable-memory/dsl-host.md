@@ -32,6 +32,10 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--ds
   (read_csv outside cwd). The wrapper catches it now.
 - **Files stay inside the working directory** (`lmtorch::check_contained`, the lmapi rule) and DSL saves replace
   atomically (rename), unlike the lmapi operations' exclusive link() writes. Re-runnable scripts need replacement.
+  Windows (`#ifdef _WIN32`, `lmtorch::win_atomic_write`): CREATE_NEW temp file next to the target, FlushFileBuffers,
+  MoveFileExW with REPLACE_EXISTING|WRITE_THROUGH (DSL) or without REPLACE_EXISTING (lmapi: ERROR_ALREADY_EXISTS is the
+  CONFLICT); no mode bits or directory fsync. Containment compares components case-insensitively and refuses ADS, device
+  names and trailing dots/spaces. Paths are in the ANSI code page there (argv and std::filesystem::path(std::string)).
 - **Models are `torch::nn::Sequential`.** State dict names equal PyTorch's (`0.weight`). `Model.save` stores
   `torchcli_format=model-1` and `layers=<summary>`; `torch.load_model` replays that spec through the same `add_layer`
   used by the builder methods, so the summary text is a format: change it only together with `replay_layers`.
