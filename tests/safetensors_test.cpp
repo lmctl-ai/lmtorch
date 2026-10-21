@@ -3,16 +3,31 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
+#ifdef _WIN32
+#include <process.h>
+#define getpid _getpid
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 using namespace lmtorch;
-static std::string artifact(const std::string&name,const std::string&header,const std::string&data={}){std::string p="/tmp/"+name+"-XXXXXX";std::vector<char>b(p.begin(),p.end());b.push_back(0);int fd=mkstemp(b.data());close(fd);p=b.data();std::ofstream f(p,std::ios::binary|std::ios::trunc);uint64_t n=header.size();for(int i=0;i<8;++i)f.put(static_cast<char>((n>>(i*8))&255));f<<header<<data;return p;}
+// A fresh, not yet existing path in the temporary directory (the working directory during the test, because artifact
+// paths must stay inside it); portable replacement for mkstemp + unlink.
+static std::string fresh(const std::string&name){static std::mt19937_64 rng(static_cast<uint64_t>(getpid())*1000003u+static_cast<uint64_t>(std::random_device{}()));for(;;){auto p=(std::filesystem::temp_directory_path()/(name+"-"+std::to_string(rng()%1000000000))).string();if(!std::filesystem::exists(p))return p;}}
+static std::string artifact(const std::string&name,const std::string&header,const std::string&data={}){std::string p=fresh(name);std::ofstream f(p,std::ios::binary|std::ios::trunc);uint64_t n=header.size();for(int i=0;i<8;++i)f.put(static_cast<char>((n>>(i*8))&255));f<<header<<data;return p;}
 template<class F> static bool throws_tool(F&&f,const std::string&code){try{f();}catch(const lmcpp::Error&e){return code.empty()?e.code==lmcpp::ErrorCode::Conflict:e.data.value("tool_code",std::string())==code;}return false;}
-int main(){try { chdir("/tmp");char tmp[]="/tmp/lmtorch-roundtrip-XXXXXX";int fd=mkstemp(tmp);close(fd);unlink(tmp);TensorData t{"F32",{2,2},{}};float values[]={1,2,3,4};t.bytes.resize(sizeof(values));std::memcpy(t.bytes.data(),values,sizeof(values));write_tensor(tmp,t);struct stat st{};assert(stat(tmp,&st)==0&&(st.st_mode&0777)==0644);auto r=read_tensor({tmp,"tensor"});assert(r.dtype=="F32"&&r.shape==std::vector<int64_t>({2,2})&&r.bytes==t.bytes);assert(throws_tool([&]{write_tensor(tmp,t);},""));auto d=descriptor({tmp,"tensor"},r);assert(d["nbytes"]==16);std::filesystem::remove(tmp);
-  char private_mode[]="/tmp/lmtorch-mode-XXXXXX";fd=mkstemp(private_mode);close(fd);unlink(private_mode);mode_t previous=umask(0077);write_tensor(private_mode,t);umask(previous);assert(stat(private_mode,&st)==0&&(st.st_mode&0777)==0600);std::filesystem::remove(private_mode);
-  TensorData second{"I64",{2},{}};int64_t numbers[]={7,9};second.bytes.resize(sizeof(numbers));std::memcpy(second.bytes.data(),numbers,sizeof(numbers));TensorBundle bundle;bundle.tensors={{"alpha",t},{"beta",second}};bundle.metadata={{"torchcli_format","1"},{"arch","mlp_relu_v1"},{"step","3"}};char multi[]="/tmp/lmtorch-bundle-XXXXXX";fd=mkstemp(multi);close(fd);unlink(multi);write_bundle(multi,bundle);auto br=read_bundle(multi);assert(br.tensors.size()==2&&br.tensors.at("alpha").bytes==t.bytes&&br.tensors.at("beta").bytes==second.bytes);assert(br.metadata==bundle.metadata);std::filesystem::remove(multi);
-  double dv[]={1.25,-2.5};TensorData f64{"F64",{2},{}};f64.bytes.resize(sizeof(dv));std::memcpy(f64.bytes.data(),dv,sizeof(dv));auto p64=artifact("lmtorch-f64","{}");std::filesystem::remove(p64);write_tensor(p64,f64);assert(read_tensor({p64,"tensor"}).bytes==f64.bytes);std::filesystem::remove(p64);
-  int64_t iv[]={-4,922337};TensorData i64{"I64",{2},{}};i64.bytes.resize(sizeof(iv));std::memcpy(i64.bytes.data(),iv,sizeof(iv));auto p64i=artifact("lmtorch-i64","{}");std::filesystem::remove(p64i);write_tensor(p64i,i64);assert(read_tensor({p64i,"tensor"}).bytes==i64.bytes);std::filesystem::remove(p64i);
+int main(){try { std::filesystem::current_path(std::filesystem::temp_directory_path());std::string tmp=fresh("lmtorch-roundtrip");TensorData t{"F32",{2,2},{}};float values[]={1,2,3,4};t.bytes.resize(sizeof(values));std::memcpy(t.bytes.data(),values,sizeof(values));write_tensor(tmp,t);
+#ifndef _WIN32
+  struct stat st{};assert(stat(tmp.c_str(),&st)==0&&(st.st_mode&0777)==0644);
+#endif
+  auto r=read_tensor({tmp,"tensor"});assert(r.dtype=="F32"&&r.shape==std::vector<int64_t>({2,2})&&r.bytes==t.bytes);assert(throws_tool([&]{write_tensor(tmp,t);},""));auto d=descriptor({tmp,"tensor"},r);assert(d["nbytes"]==16);std::filesystem::remove(tmp);
+#ifndef _WIN32
+  std::string private_mode=fresh("lmtorch-mode");mode_t previous=umask(0077);write_tensor(private_mode,t);umask(previous);assert(stat(private_mode.c_str(),&st)==0&&(st.st_mode&0777)==0600);std::filesystem::remove(private_mode);
+#endif
+  TensorData second{"I64",{2},{}};int64_t numbers[]={7,9};second.bytes.resize(sizeof(numbers));std::memcpy(second.bytes.data(),numbers,sizeof(numbers));TensorBundle bundle;bundle.tensors={{"alpha",t},{"beta",second}};bundle.metadata={{"torchcli_format","1"},{"arch","mlp_relu_v1"},{"step","3"}};std::string multi=fresh("lmtorch-bundle");write_bundle(multi,bundle);auto br=read_bundle(multi);assert(br.tensors.size()==2&&br.tensors.at("alpha").bytes==t.bytes&&br.tensors.at("beta").bytes==second.bytes);assert(br.metadata==bundle.metadata);std::filesystem::remove(multi);
+  double dv[]={1.25,-2.5};TensorData f64{"F64",{2},{}};f64.bytes.resize(sizeof(dv));std::memcpy(f64.bytes.data(),dv,sizeof(dv));auto p64=fresh("lmtorch-f64");write_tensor(p64,f64);assert(read_tensor({p64,"tensor"}).bytes==f64.bytes);std::filesystem::remove(p64);
+  int64_t iv[]={-4,922337};TensorData i64{"I64",{2},{}};i64.bytes.resize(sizeof(iv));std::memcpy(i64.bytes.data(),iv,sizeof(iv));auto p64i=fresh("lmtorch-i64");write_tensor(p64i,i64);assert(read_tensor({p64i,"tensor"}).bytes==i64.bytes);std::filesystem::remove(p64i);
   auto trunc=artifact("lmtorch-truncated",R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}})","12");assert(throws_tool([&]{read_tensor({trunc,"tensor"});},"INVALID_OFFSETS"));std::filesystem::remove(trunc);
   auto bad=artifact("lmtorch-offset",R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,8]}})","12345678");assert(throws_tool([&]{read_tensor({bad,"tensor"});},"INVALID_OFFSETS"));std::filesystem::remove(bad);
   std::string duplicate=R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,4]},"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}})";auto dup=artifact("lmtorch-duplicate",duplicate,"1234");assert(throws_tool([&]{read_tensor({dup,"tensor"});},"DUPLICATE_KEY"));std::filesystem::remove(dup);

@@ -11,9 +11,11 @@ binary, unit, oracle = sys.argv[1:]
 if not os.path.exists(binary): binary = binary.replace("/build-lmtorch/", "/build/")
 if not os.path.exists(unit): unit = unit.replace("/build-lmtorch/", "/build/")
 # A fully static binary makes ldd exit 1 with "not a dynamic executable"; a dynamic one must resolve every library.
-ldd = subprocess.run(["ldd", binary], text=True, capture_output=True)
-assert "not found" not in ldd.stdout, ldd.stdout
-assert ldd.returncode == 0 or "not a dynamic executable" in ldd.stdout + ldd.stderr, (ldd.stdout, ldd.stderr)
+# (Linux only: test.sh checks the macOS and Windows imports with otool -L and dumpbin /dependents.)
+if sys.platform.startswith("linux"):
+    ldd = subprocess.run(["ldd", binary], text=True, capture_output=True)
+    assert "not found" not in ldd.stdout, ldd.stdout
+    assert ldd.returncode == 0 or "not a dynamic executable" in ldd.stdout + ldd.stderr, (ldd.stdout, ldd.stderr)
 assert not torch.cuda.is_available(), "CPU wheel unexpectedly reports CUDA"
 subprocess.run([unit], check=True)
 
@@ -156,7 +158,7 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-test-") as d:
     rejected("VALIDATION_ERROR","tensor_softmax","--input",paths["a"]+"#tensor","--dim",9223372036854775808,"--out",os.path.join(d,"bad-dim.safetensors"))
     rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out","../lmtorch-escape.safetensors")
     with tempfile.TemporaryDirectory(prefix="lmtorch-outside-") as outside:
-        os.symlink(outside,os.path.join(d,"escape"))
+        os.symlink(outside,os.path.join(d,"escape"),target_is_directory=True)
         rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out",os.path.join(d,"escape","symlink-out.safetensors"))
         external=os.path.join(outside,"external.safetensors");save_file({"tensor":torch.ones(1)},external)
         rejected("VALIDATION_ERROR","tensor_inspect","--input",external+"#tensor")

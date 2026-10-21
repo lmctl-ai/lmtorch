@@ -3,13 +3,26 @@
 #include <array>
 #include <cerrno>
 #include <cstring>
-#include <fcntl.h>
 #include <fstream>
 #include <filesystem>
 #include <map>
 #include <set>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <atomic>
+#include <cwchar>
+#include <cwctype>
+#else
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace lmtorch {
 using lmcpp::Error;
@@ -18,7 +31,24 @@ using Json = lmcpp::Json;
 namespace {
 constexpr uint64_t kMaxHeader = 1024 * 1024;
 constexpr uint64_t kMaxArtifact = 256 * 1024 * 1024;
+#ifdef _WIN32
+// Windows paths compare case-insensitively per component ("C:" and "c:", "\\" and "/" are the same), and names that Win32
+// maps to something other than the file they spell are refused: alternate data streams ("a:s"), reserved devices (CON,
+// NUL, COM1, "nul.txt") and trailing dots or spaces (silently stripped, so "a." aliases "a").
+bool same_component(const std::filesystem::path&a,const std::filesystem::path&b){return _wcsicmp(a.c_str(),b.c_str())==0;}
+bool unsafe_component(const std::wstring&part){
+  if(part.empty()||part==L"."||part==L"..")return false;
+  if(part.back()==L'.'||part.back()==L' ')return true;
+  for(wchar_t c:part)if(c<0x20||c==L':'||c==L'<'||c==L'>'||c==L'"'||c==L'|'||c==L'?'||c==L'*')return true;
+  std::wstring base=part.substr(0,part.find(L'.'));while(!base.empty()&&base.back()==L' ')base.pop_back();
+  for(auto&c:base)c=static_cast<wchar_t>(std::towupper(c));
+  for(const wchar_t*d:{L"CON",L"PRN",L"AUX",L"NUL",L"CONIN$",L"CONOUT$"})if(base==d)return true;
+  return base.size()==4&&(base.compare(0,3,L"COM")==0||base.compare(0,3,L"LPT")==0)&&((base[3]>=L'0'&&base[3]<=L'9')||base[3]==0xB9||base[3]==0xB2||base[3]==0xB3);
+}
+void contained(const std::string& name){std::filesystem::path raw(name);for(const auto&part:raw.relative_path())if(unsafe_component(part.wstring()))throw Error{ErrorCode::ValidationError,"unsafe Windows path component '"+part.string()+"'",{{"tool_code","INVALID_PATH"}}};std::error_code ec;auto root=std::filesystem::canonical(std::filesystem::current_path(),ec);if(ec)throw Error{ErrorCode::ValidationError,"cannot resolve working directory",{{"tool_code","INVALID_PATH"}}};auto target=std::filesystem::weakly_canonical(std::filesystem::absolute(raw),ec);if(ec)throw Error{ErrorCode::ValidationError,"cannot resolve artifact path",{{"tool_code","INVALID_PATH"}}};root.make_preferred();target.make_preferred();auto r=root.begin(),t=target.begin();for(;r!=root.end()&&t!=target.end()&&same_component(*r,*t);++r,++t){}if(r!=root.end())throw Error{ErrorCode::ValidationError,"artifact path escapes working directory",{{"tool_code","PATH_OUTSIDE_WORKSPACE"}}};}
+#else
 void contained(const std::string& name){std::error_code ec;auto root=std::filesystem::canonical(std::filesystem::current_path(),ec);if(ec)throw Error{ErrorCode::ValidationError,"cannot resolve working directory",{{"tool_code","INVALID_PATH"}}};auto target=std::filesystem::weakly_canonical(std::filesystem::absolute(name),ec);if(ec)throw Error{ErrorCode::ValidationError,"cannot resolve artifact path",{{"tool_code","INVALID_PATH"}}};auto r=root.begin(),t=target.begin();for(;r!=root.end()&&t!=target.end()&&*r==*t;++r,++t){}if(r!=root.end())throw Error{ErrorCode::ValidationError,"artifact path escapes working directory",{{"tool_code","PATH_OUTSIDE_WORKSPACE"}}};}
+#endif
 [[noreturn]] void bad(std::string message, std::string code="INVALID_ARTIFACT") {
   throw Error{ErrorCode::CommandFailed, std::move(message), {{"tool_code", code}}};
 }
@@ -40,8 +70,40 @@ uint64_t count_elements(const std::vector<int64_t>& shape) {
 }
 uint64_t little_u64(const uint8_t*p){uint64_t n=0;for(int i=7;i>=0;--i)n=(n<<8)|p[i];return n;}
 void put_u64(std::string&out,uint64_t n){for(int i=0;i<8;++i)out.push_back(static_cast<char>((n>>(i*8))&0xff));}
+#ifndef _WIN32
 void write_all(int fd,const char*p,size_t n){while(n){ssize_t w=::write(fd,p,n);if(w<0){if(errno==EINTR)continue;throw Error{ErrorCode::CommandFailed,"failed writing safetensors file",{{"tool_code","OUTPUT_WRITE_FAILED"}}};}p+=w;n-=static_cast<size_t>(w);}}
+#endif
 }
+#ifdef _WIN32
+// No umask/fchmod/link(2)/directory fsync on Windows. The temporary is a fresh CREATE_NEW name next to the target (a name
+// planted there makes creation fail, never redirects it), flushed with FlushFileBuffers and installed with MoveFileExW:
+// MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH when replacing (atomic on one NTFS volume), and without
+// REPLACE_EXISTING when the target must not exist, so "refuse an existing output" stays a single atomic step. The file
+// gets the directory's inherited ACL (there are no POSIX mode bits to apply).
+WinWrite win_atomic_write(const std::string&path,const char*data,size_t n,bool replace,std::string&detail){
+  auto error=[&](const char*what){detail=std::string(what)+" (Win32 error "+std::to_string(GetLastError())+")";};
+  const std::wstring target=std::filesystem::path(path).wstring();
+  static std::atomic<unsigned> counter{0};
+  std::wstring tmp;HANDLE h=INVALID_HANDLE_VALUE;
+  for(int attempt=0;attempt<100&&h==INVALID_HANDLE_VALUE;++attempt){
+    tmp=target+L".tmp"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(counter++);
+    h=CreateFileW(tmp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(h==INVALID_HANDLE_VALUE&&GetLastError()!=ERROR_FILE_EXISTS&&GetLastError()!=ERROR_ALREADY_EXISTS)break;
+  }
+  if(h==INVALID_HANDLE_VALUE){error("cannot create temporary file");return WinWrite::CreateFailed;}
+  bool good=true;size_t off=0;
+  while(good&&off<n){DWORD chunk=static_cast<DWORD>(std::min<size_t>(n-off,size_t(1)<<30)),written=0;if(!WriteFile(h,data+off,chunk,&written,nullptr)||written==0){error("write failed");good=false;}off+=written;}
+  if(good&&!FlushFileBuffers(h)){error("flush failed");good=false;}
+  if(!CloseHandle(h)&&good){error("close failed");good=false;}
+  if(!good){DeleteFileW(tmp.c_str());return WinWrite::WriteFailed;}
+  if(!MoveFileExW(tmp.c_str(),target.c_str(),MOVEFILE_WRITE_THROUGH|(replace?MOVEFILE_REPLACE_EXISTING:0))){
+    DWORD e=GetLastError();error("cannot install");DeleteFileW(tmp.c_str());
+    if(!replace&&(e==ERROR_ALREADY_EXISTS||e==ERROR_FILE_EXISTS))return WinWrite::Exists;
+    return WinWrite::InstallFailed;
+  }
+  return WinWrite::Ok;
+}
+#endif
 void check_contained(const std::string&path){contained(path);}
 TensorRef parse_ref(const std::string&ref){auto h=ref.find('#');if(h==std::string::npos||h==0||h+1==ref.size()||ref.find('#',h+1)!=std::string::npos)throw Error{ErrorCode::ValidationError,"tensor reference must be path#key",{{"tool_code","INVALID_TENSOR_REF"}}};return{ref.substr(0,h),ref.substr(h+1)};}
 TensorBundle read_bundle(const std::string&path){
@@ -80,8 +142,19 @@ std::string write_bundle(const std::string&path,const TensorBundle&bundle,bool r
   for(const auto&entry:bundle.tensors){const auto&t=entry.second;if(entry.first.empty()||entry.first=="__metadata__")bad("invalid safetensors tensor key", "INVALID_TENSOR");uint64_t count=count_elements(t.shape),unit=element_size(t.dtype);if(count>kMaxArtifact/unit)bad("tensor exceeds artifact size limit", "OUTPUT_TOO_LARGE");uint64_t size=count*unit;if(size!=t.bytes.size()||offset>kMaxArtifact-size)bad("tensor bytes do not match dtype and shape", "INVALID_TENSOR");hdr[entry.first]={{"dtype",t.dtype},{"shape",t.shape},{"data_offsets",{offset,offset+size}}};payload.insert(payload.end(),t.bytes.begin(),t.bytes.end());offset+=size;}
   if(!bundle.metadata.empty()){hdr["__metadata__"]=Json::object();for(const auto&item:bundle.metadata)hdr["__metadata__"][item.first]=item.second;}
   std::string h=hdr.dump();size_t padded=(h.size()+7)&~size_t(7);h.resize(padded,' ');if(h.size()>kMaxHeader||h.size()+8+payload.size()>kMaxArtifact)bad("output artifact exceeds size limit", "OUTPUT_TOO_LARGE");
+#ifdef _WIN32
+  std::string bytes;put_u64(bytes,h.size());bytes+=h;bytes.append(reinterpret_cast<const char*>(payload.data()),payload.size());std::string detail;
+  switch(win_atomic_write(path,bytes.data(),bytes.size(),replace,detail)){
+    case WinWrite::Ok:return path;
+    case WinWrite::Exists:throw Error{ErrorCode::Conflict,"output already exists: "+path,{{"path",path}}};
+    case WinWrite::CreateFailed:throw Error{ErrorCode::CommandFailed,"cannot create output temporary file for "+path+": "+detail,{{"tool_code","OUTPUT_WRITE_FAILED"}}};
+    case WinWrite::WriteFailed:throw Error{ErrorCode::CommandFailed,"failed writing safetensors file",{{"tool_code","OUTPUT_WRITE_FAILED"}}};
+    default:throw Error{ErrorCode::CommandFailed,"cannot install output artifact: "+path,{{"tool_code","OUTPUT_WRITE_FAILED"}}};
+  }
+#else
   std::string tmp=path+".tmpXXXXXX";std::vector<char>name(tmp.begin(),tmp.end());name.push_back('\0');int fd=::mkstemp(name.data());if(fd<0)throw Error{ErrorCode::CommandFailed,"cannot create output temporary file for "+path+": "+std::strerror(errno),{{"tool_code","OUTPUT_WRITE_FAILED"}}};std::string tempfile(name.data());
   try{std::string prefix;put_u64(prefix,h.size());write_all(fd,prefix.data(),prefix.size());write_all(fd,h.data(),h.size());if(!payload.empty())write_all(fd,reinterpret_cast<const char*>(payload.data()),payload.size());mode_t mask=::umask(0);::umask(mask);if(::fchmod(fd,0644&~mask)!=0||::fsync(fd)!=0)throw std::runtime_error("failed to flush artifact");if(::close(fd)!=0){fd=-1;throw std::runtime_error("close failed");}fd=-1;if(replace){if(::rename(tempfile.c_str(),path.c_str())!=0)throw Error{ErrorCode::CommandFailed,"cannot install output artifact: "+path,{{"tool_code","OUTPUT_WRITE_FAILED"}}};}else if(::link(tempfile.c_str(),path.c_str())!=0){if(errno==EEXIST)throw Error{ErrorCode::Conflict,"output already exists: "+path,{{"path",path}}};throw Error{ErrorCode::CommandFailed,"cannot install output artifact: "+path,{{"tool_code","OUTPUT_WRITE_FAILED"}}};}auto parent=std::filesystem::path(path).parent_path();if(parent.empty())parent=".";int dirfd=::open(parent.c_str(),O_RDONLY|O_DIRECTORY);if(dirfd<0||::fsync(dirfd)!=0){if(dirfd>=0)::close(dirfd);::unlink(path.c_str());throw Error{ErrorCode::CommandFailed,"cannot sync artifact directory",{{"tool_code","OUTPUT_WRITE_FAILED"}}};}::close(dirfd);::unlink(tempfile.c_str());}catch(...){if(fd>=0)::close(fd);::unlink(tempfile.c_str());throw;}return path;
+#endif
 }
 std::string write_tensor(const std::string&path,const TensorData&t,bool replace){TensorBundle b;b.tensors.emplace("tensor",t);return write_bundle(path,b,replace);}
 lmcpp::Json descriptor(const TensorRef&ref,const TensorData&t){return{{"ref",ref.path+"#"+ref.key},{"path",ref.path},{"key",ref.key},{"dtype",t.dtype},{"shape",t.shape},{"nbytes",t.bytes.size()}};}

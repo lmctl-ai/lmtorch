@@ -19,8 +19,10 @@
 #include <map>
 #include <set>
 #include <sstream>
+#ifndef _WIN32
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace lmtorch::dsl {
 namespace {
@@ -150,6 +152,10 @@ std::string read_text(const std::string& path) {
 void write_text_atomic(const std::string& path, const std::string& text) {
   if (path.empty()) fail("output path must not be empty");
   lmtorch::check_contained(path);
+#ifdef _WIN32
+  std::string detail;
+  if (lmtorch::win_atomic_write(path, text.data(), text.size(), true, detail) != lmtorch::WinWrite::Ok) fail("cannot write " + path + ": " + detail);
+#else
   std::string tmp = path + ".tmpXXXXXX";
   std::vector<char> name(tmp.begin(), tmp.end());
   name.push_back('\0');
@@ -165,6 +171,7 @@ void write_text_atomic(const std::string& path, const std::string& text) {
   ::umask(mask);
   if (::fchmod(fd, 0644 & ~mask) != 0 || ::fsync(fd) != 0 || ::close(fd) != 0) { ::unlink(name.data()); fail("cannot write " + path); }
   if (::rename(name.data(), path.c_str()) != 0) { ::unlink(name.data()); fail("cannot write " + path + ": " + std::strerror(errno)); }
+#endif
 }
 
 lmtorch::TensorData to_data(const torch::Tensor& input) {

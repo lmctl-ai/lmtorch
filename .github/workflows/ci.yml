@@ -1,92 +1,182 @@
 name: CI
 
-# Builds lmtorch on Linux arm64 and amd64 and runs ./test.sh:
-#   release  static CPU-only libtorch from source (cached by lock, build script, runner image and arch), static libstdc++ and
-#            libgcc, glibc shared; Ubuntu 22.04 runners set the glibc floor to 2.35
-#   dev      against the PyTorch wheel's shared libtorch (fast)
-# On a v* tag, the release job also publishes the stripped binaries and license texts as a GitHub Release.
+# Builds lmtorch on every platform lmhtml ships and runs ./test.sh on each:
+#   release  static CPU-only libtorch 2.9.1 built from source by scripts/build-libtorch.sh (cached per runner, lock and
+#            script), linked whole-archive into one self-contained executable:
+#              linux-x64, linux-arm64   GCC; libstdc++/libgcc static, glibc shared (Ubuntu 22.04 runners: glibc >= 2.35)
+#              macos-arm64, macos-x64   AppleClang; only libc++ and libSystem dynamic (deployment target macOS 13.0)
+#              windows-x64              MSVC; static runtime (/MT), only Windows system DLLs
+#   dev      (Linux) against the PyTorch wheel's shared libtorch (fast)
+# A v* tag publishes every platform's executable, archive and checksum as a GitHub Release.
+# workflow_dispatch with `only` runs a single platform (cheap iteration: macOS minutes bill 10x, Windows 2x).
 
 on:
   push:
     branches: [main]
     tags: ['v*']
+    # Docs-only pushes do not need the matrix; path filters are not evaluated for tag pushes, so releases always build.
+    paths-ignore: ['durable-memory/**', '**.md']
   pull_request:
     branches: [main]
+    paths-ignore: ['durable-memory/**', '**.md']
   workflow_dispatch:
+    inputs:
+      only:
+        description: Run a single platform (or all)
+        required: true
+        default: all
+        type: choice
+        options: [all, linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64]
 
 permissions:
   contents: read
 
 env:
-  LMCPP_REF: f6c6f51797912a369d6b27cf9e96f148a9a0e4d1
+  LMCPP_REF: 93a1847c081894ab1e9ed02ad5ea6350b5d5bd06
   LMCTL_VERSION: 0.2.347   # lmscript with DSL bytecode v5 (>= 0.2.346 required)
 
 jobs:
+  plan:
+    name: Matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.only || 'all' }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os
+          # torch: the oracle wheel (tests only, never shipped); empty where PyTorch publishes none (macOS x86_64).
+          rows = [
+              {"platform": "linux-arm64", "runner": "ubuntu-22.04-arm", "mode": "release", "jobs": 4, "torch": "torch==2.9.1+cpu"},
+              {"platform": "linux-x64", "runner": "ubuntu-22.04", "mode": "release", "jobs": 4, "torch": "torch==2.9.1+cpu"},
+              {"platform": "linux-arm64", "runner": "ubuntu-22.04-arm", "mode": "dev", "jobs": 4, "torch": "torch==2.9.1+cpu"},
+              {"platform": "linux-x64", "runner": "ubuntu-22.04", "mode": "dev", "jobs": 4, "torch": "torch==2.9.1+cpu"},
+              {"platform": "macos-arm64", "runner": "macos-15", "mode": "release", "jobs": 3, "torch": "torch==2.9.1"},
+              {"platform": "macos-x64", "runner": "macos-15-intel", "mode": "release", "jobs": 4, "torch": ""},
+              {"platform": "windows-x64", "runner": "windows-2022", "mode": "release", "jobs": 4, "torch": "torch==2.9.1+cpu"},
+          ]
+          only = os.environ["ONLY"]
+          print("matrix=" + json.dumps({"include": [r for r in rows if only in ("all", r["platform"])]}))
+          PY
+
   build-and-test:
-    name: ${{ matrix.mode }} (${{ matrix.arch }})
+    name: ${{ matrix.mode }} (${{ matrix.platform }})
+    needs: plan
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 350
+    timeout-minutes: 355
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { runner: ubuntu-22.04-arm, arch: arm64, mode: release }
-          - { runner: ubuntu-22.04, arch: x64, mode: release }
-          - { runner: ubuntu-22.04-arm, arch: arm64, mode: dev }
-          - { runner: ubuntu-22.04, arch: x64, mode: dev }
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Git settings (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
         with:
           path: lmtorch
+          persist-credentials: false
       - name: Checkout pinned lmcpp
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
         with:
           repository: lmctl-ai/lmcpp
           ref: ${{ env.LMCPP_REF }}
           path: lmcpp
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af   # v4.1.0
         with:
           node-version: '24.15'
-      - name: Tools
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5.6.0
+        if: runner.os != 'Linux'
+        with:
+          python-version: '3.12'
+      - name: MSVC developer environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756   # v1
+        with:
+          arch: x64
+      - name: Tools (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends nlohmann-json3-dev python3-venv file binutils
           # PyTorch 2.9 needs CMake >= 3.27; Ubuntu 22.04 ships 3.22.
           python3 -m pip install --user --quiet 'cmake==3.31.6' 'ninja==1.11.1.4' pyyaml typing_extensions
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          npm install -g "@lmctl-ai/lmctl@${LMCTL_VERSION}"
+      - name: Tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install nlohmann-json
+          python -m pip install --quiet 'cmake==3.31.6' 'ninja==1.11.1.4' pyyaml typing_extensions
+      - name: Tools (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install nlohmann-json:x64-windows
+          echo "CMAKE_PREFIX_PATH=$(cygpath -m "$VCPKG_INSTALLATION_ROOT")/installed/x64-windows" >> "$GITHUB_ENV"
+          python -m pip install --quiet 'cmake==3.31.6' 'ninja==1.11.1.4' pyyaml typing_extensions
+          # The scripts call python3; the Windows Python is python.exe.
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/usr/bin/env bash\nexec python "$@"\n' > "$RUNNER_TEMP/bin/python3"
+          chmod +x "$RUNNER_TEMP/bin/python3"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          # libtorch's source and build trees go to short paths (MAX_PATH) on the faster D: drive.
+          echo "LIBTORCH_SRC=D:/pt/src" >> "$GITHUB_ENV"
+          echo "LIBTORCH_BUILD=D:/pt/b" >> "$GITHUB_ENV"
+          echo "LIBTORCH_PYTHON=python" >> "$GITHUB_ENV"
+      - name: lmscript compiler
+        run: npm install -g "@lmctl-ai/lmctl@${LMCTL_VERSION}"
       - name: Secrets scan
         run: python3 lmtorch/scripts/no-secrets.py
-      - name: Oracle venv (torch 2.9.1+cpu wheel; tests only, never shipped)
+      - name: Oracle venv (PyTorch wheel; tests only, never shipped)
+        if: matrix.torch != ''
         run: |
           python3 -m venv ~/.cache/lmtorch/oracle-venv
-          ~/.cache/lmtorch/oracle-venv/bin/pip install --quiet torch==2.9.1+cpu safetensors numpy --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          py=~/.cache/lmtorch/oracle-venv/bin/python
+          [ -x "$py" ] || py=~/.cache/lmtorch/oracle-venv/Scripts/python.exe
+          "$py" -m pip install --quiet "${{ matrix.torch }}" safetensors numpy --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          "$py" -c 'import torch; print("oracle torch", torch.__version__)'
       - name: Restore static libtorch
         if: matrix.mode == 'release'
         id: libtorch
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684   # v4.2.3
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684   # v4.2.3
         with:
           path: ~/.cache/lmtorch/libtorch-static
           key: libtorch-${{ matrix.runner }}-${{ hashFiles('lmtorch/libtorch.lock', 'lmtorch/scripts/build-libtorch.sh') }}
       - name: Build static libtorch (cold cache only)
         if: matrix.mode == 'release' && steps.libtorch.outputs.cache-hit != 'true'
-        run: LIBTORCH_JOBS=4 lmtorch/scripts/build-libtorch.sh
+        run: LIBTORCH_JOBS=${{ matrix.jobs }} lmtorch/scripts/build-libtorch.sh
+      # Saved right after the multi-hour build, so a later failing step does not discard it.
+      - name: Save static libtorch
+        if: matrix.mode == 'release' && steps.libtorch.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684   # v4.2.3
+        with:
+          path: ~/.cache/lmtorch/libtorch-static
+          key: ${{ steps.libtorch.outputs.cache-primary-key }}
       - name: Build lmtorch
         env:
           LMCPP_DIR: ${{ github.workspace }}/lmcpp
+          JOBS: ${{ matrix.jobs }}
         run: |
           if [ "${{ matrix.mode }}" = dev ]; then lmtorch/scripts/build-native.sh --dev; else lmtorch/scripts/build-native.sh; fi
       - name: Test
         run: |
-          if [ "${{ matrix.mode }}" = release ]; then export LMTORCH_REQUIRE_RELEASE=1 LMTORCH_BIN="$PWD/lmtorch/build/bin/lmtorch"; else export LMTORCH_BIN="$PWD/lmtorch/build-dev/bin/lmtorch"; fi
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=.exe
+          if [ "${{ matrix.mode }}" = release ]; then export LMTORCH_REQUIRE_RELEASE=1 LMTORCH_BIN="$PWD/lmtorch/build/bin/lmtorch$exe"; else export LMTORCH_BIN="$PWD/lmtorch/build-dev/bin/lmtorch$exe"; fi
           lmtorch/test.sh
       - name: Package
         if: matrix.mode == 'release'
-        run: lmtorch/scripts/package-release.sh lmtorch/build/bin/lmtorch "linux-${{ matrix.arch }}" dist
+        run: lmtorch/scripts/package-release.sh lmtorch/build/bin/lmtorch "${{ matrix.platform }}" dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2
         if: matrix.mode == 'release'
         with:
-          name: lmtorch-linux-${{ matrix.arch }}
+          name: lmtorch-${{ matrix.platform }}
           path: dist/*
           if-no-files-found: error
 
@@ -100,9 +190,19 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4.3.0
         with:
+          pattern: lmtorch-*
           path: dist
           merge-multiple: true
       - name: Create the release and attach the assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          ls -l dist
+          for p in linux-x64 linux-arm64 macos-arm64 macos-x64; do test -f "dist/lmtorch-$p" -a -f "dist/lmtorch-$p.tar.gz" -a -f "dist/lmtorch-$p.sha256"; done
+          test -f dist/lmtorch-windows-x64.exe -a -f dist/lmtorch-windows-x64.zip -a -f dist/lmtorch-windows-x64.sha256
+          # Idempotent: re-running a tag's workflow replaces the assets.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          fi

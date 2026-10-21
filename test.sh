@@ -5,32 +5,49 @@
 #   LMTORCH_BIN       binary under test (default build/bin/lmtorch, else build-dev/bin/lmtorch)
 #   LMSCRIPT_BIN       compiler (default lmscript on PATH; must emit DSL bytecode v5)
 #   ORACLE_PYTHON      python with torch + safetensors (default ~/.cache/lmtorch/oracle-venv/bin/python when present)
-#   LMTORCH_REQUIRE_RELEASE=1  fail unless only glibc is dynamically linked (release gate)
+#   LMTORCH_REQUIRE_RELEASE=1  fail unless only system libraries are dynamically linked (release gate): glibc's own on
+#                              Linux, libc++ and libSystem on macOS, Windows system DLLs (no VC++ runtime) on Windows
+# Runs under bash on Linux, macOS and Windows (Git Bash; the binaries are lmtorch.exe and lmtorch_unit.exe).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
+case "$(uname -s)" in Darwin) OS=macos;; MINGW*|MSYS*|CYGWIN*) OS=windows;; *) OS=linux;; esac
+EXE=""; [ "$OS" = windows ] && EXE=.exe
+# Native Windows programs (lmtorch.exe, node, python) cannot open Git Bash's /c/... or /tmp paths written into files or
+# environment variables; npath gives the drive-letter form (C:/...). Elsewhere it is the identity.
+npath() { if [ "$OS" = windows ]; then cygpath -m -l "$1"; else printf '%s\n' "$1"; fi; }
 if [ -z "${LMTORCH_BIN:-}" ]; then
-  if [ -x build/bin/lmtorch ]; then LMTORCH_BIN="$HERE/build/bin/lmtorch"; else LMTORCH_BIN="$HERE/build-dev/bin/lmtorch"; fi
+  if [ -x "build/bin/lmtorch$EXE" ]; then LMTORCH_BIN="$HERE/build/bin/lmtorch$EXE"; else LMTORCH_BIN="$HERE/build-dev/bin/lmtorch$EXE"; fi
 fi
 BIN="$(cd "$(dirname "$LMTORCH_BIN")" && pwd)/$(basename "$LMTORCH_BIN")"
-UNIT="$(dirname "$(dirname "$BIN")")/lmtorch_unit"
+BIN_DIR="$(dirname "$BIN")"
+UNIT="$(dirname "$BIN_DIR")/lmtorch_unit$EXE"
 LMSCRIPT="${LMSCRIPT_BIN:-$(command -v lmscript || true)}"
 ORACLE_PYTHON="${ORACLE_PYTHON:-}"
-[ -n "$ORACLE_PYTHON" ] || { [ -x "$HOME/.cache/lmtorch/oracle-venv/bin/python" ] && ORACLE_PYTHON="$HOME/.cache/lmtorch/oracle-venv/bin/python"; } || true
+for candidate in "$HOME/.cache/lmtorch/oracle-venv/bin/python" "$HOME/.cache/lmtorch/oracle-venv/Scripts/python.exe"; do
+  [ -n "$ORACLE_PYTHON" ] || { [ -x "$candidate" ] && ORACLE_PYTHON="$candidate"; } || true
+done
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lmtorch-test-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+WORK="$(npath "$WORK")"
+HERE_N="$(npath "$HERE")"
 pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
 [ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.346), or set LMSCRIPT_BIN"
 # Schema-module imports and the example helper launch lmtorch by name.
-export PATH="$(dirname "$BIN"):$PATH"
+export PATH="$BIN_DIR:$PATH"
+BIN="$(npath "$BIN")"
+UNIT="$(npath "$UNIT")"
 export LMTORCH_BIN="$BIN"
+# The Python oracles start the compiler themselves: on Windows that is npm's lmscript.cmd, not the Git Bash shim.
+LMSCRIPT_PY="$LMSCRIPT"
+[ "$OS" = windows ] && [ -f "$LMSCRIPT.cmd" ] && LMSCRIPT_PY="$(npath "$LMSCRIPT.cmd")"
 
 scripts/sync-sdk.sh --verify >/dev/null || fail "third_party/dslvm/dslvm.hpp differs from sdk.lock"
 ok "vendored dslvm.hpp matches sdk.lock"
-printf 'p = _dsl_ schema="%s";\nwhile (false) {}\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
+printf 'p = _dsl_ schema="%s";\nwhile (false) {}\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
 "$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v5 while loop against the schema"
 [ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 5 ] || fail "$LMSCRIPT does not emit bytecode v5"
 ok "compiler $("$LMSCRIPT" --version) emits DSL bytecode v5"
@@ -60,16 +77,37 @@ else
   echo "# skipped: _dsl_ cli= (this lmscript predates lmscript R42)"
 fi
 
-# Release form: libtorch, libstdc++ and libgcc static; at most glibc's own libraries are shared (or nothing: fully static).
-needed="$(readelf -d "$BIN" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort | tr '\n' ' ')"
-foreign="$(printf '%s\n' $needed | grep -Ev '^(libc\.so\.6|libm\.so\.6|libpthread\.so\.0|libdl\.so\.2|librt\.so\.1|ld-linux.*\.so\.[0-9]+)$' || true)"
+# Release form: libtorch and the C++ runtime static; only the operating system's own libraries are dynamic.
+size="$(wc -c < "$BIN" | tr -d ' ')"
+case "$OS" in
+  linux)
+    # libstdc++ and libgcc static; at most glibc's own libraries are shared (or nothing: fully static).
+    needed="$(readelf -d "$BIN" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort | tr '\n' ' ')"
+    foreign="$(printf '%s\n' $needed | grep -Ev '^(libc\.so\.6|libm\.so\.6|libpthread\.so\.0|libdl\.so\.2|librt\.so\.1|ld-linux.*\.so\.[0-9]+)$' || true)"
+    if [ -z "$needed" ]; then form="fully static"; else form="glibc-only dynamic ($needed), needs glibc >= $(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)"; fi;;
+  macos)
+    # libc++ and libSystem ship with macOS (no Homebrew, no @rpath); the deployment target is the macOS floor.
+    needed="$(otool -L "$BIN" | tail -n +2 | awk '{print $1}' | sort | tr '\n' ' ')"
+    foreign="$(printf '%s\n' $needed | grep -Ev '^/usr/lib/(libc\+\+\.1|libSystem\.B)\.dylib$' || true)"
+    minos="$(otool -l "$BIN" | awk '/LC_BUILD_VERSION/ {b=1} b && $1 == "minos" {print $2; exit}')"
+    form="system-library-only dynamic ($needed), needs macOS >= ${minos:-unknown}";;
+  windows)
+    # Static MSVC runtime (/MT): no vcruntime*/msvcp*/ucrtbase/api-ms-win-crt-* DLLs, only DLLs every Windows has.
+    if command -v dumpbin >/dev/null 2>&1; then
+      needed="$(dumpbin -nologo -dependents "$BIN" | tr -d '\r' | sed -n 's/^ *\([A-Za-z0-9_.-]*\.[dD][lL][lL]\)$/\1/p' | tr 'A-Z' 'a-z' | sort -u | tr '\n' ' ')"
+    else
+      needed="$(objdump -p "$BIN" | tr -d '\r' | sed -n 's/.*DLL Name: *//p' | tr 'A-Z' 'a-z' | sort -u | tr '\n' ' ')"
+    fi
+    [ -n "$needed" ] || fail "cannot list the DLLs $BIN imports (dumpbin or objdump needed)"
+    foreign="$(printf '%s\n' $needed | grep -Ev '^(kernel32|kernelbase|ntdll|advapi32|user32|gdi32|shell32|shlwapi|ole32|oleaut32|uuid|comdlg32|ws2_32|bcrypt|crypt32|secur32|dbghelp|psapi|userenv|iphlpapi|rpcrt4|version|winmm|powrprof|setupapi|cfgmgr32|synchronization|api-ms-win-core-[a-z0-9-]+)\.dll$' || true)"
+    form="Windows system DLLs only ($needed), static MSVC runtime";;
+esac
 if [ -z "$foreign" ]; then
-  if [ -z "$needed" ]; then form="fully static"; else form="glibc-only dynamic ($needed), needs glibc >= $(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)"; fi
-  ok "release form: $form, $(stat -c %s "$BIN") bytes"
+  ok "release form: $form, $size bytes"
 elif [ "${LMTORCH_REQUIRE_RELEASE:-0}" = 1 ]; then
-  fail "$BIN links non-glibc shared libraries: $foreign"
+  fail "$BIN links non-system shared libraries: $foreign"
 else
-  echo "# note: $BIN is a development build linking $(echo $foreign | wc -w) non-glibc libraries (LMTORCH_REQUIRE_RELEASE=1 enforces the release form)"
+  echo "# note: $BIN is a development build linking $(echo $foreign | wc -w | tr -d ' ') non-system libraries (LMTORCH_REQUIRE_RELEASE=1 enforces the release form)"
 fi
 
 if [ -x "$UNIT" ]; then (cd "$WORK" && "$UNIT") || fail "C++ safetensors unit tests"; ok "C++ safetensors unit tests"; fi
@@ -80,16 +118,16 @@ mkdir -p "$WORK/api/dsl-api-work"
 grep -q '"series":\[1,2.5\]' "$WORK/api/result.json" || fail "DSL API suite result: $(cat "$WORK/api/result.json")"
 ok "DSL API suite ($(grep -c 'out.check' tests/dsl/api.lms) checks)"
 mkdir -p "$WORK/negative"
-(cd "$WORK/negative" && "$LMSCRIPT" "$HERE/tests/dsl/negative.lms" "$BIN") > "$WORK/negative.log" || fail "refusal suite: $(cat "$WORK/negative.log")"
+(cd "$WORK/negative" && "$LMSCRIPT" "$HERE_N/tests/dsl/negative.lms" "$BIN") > "$WORK/negative.log" || fail "refusal suite: $(cat "$WORK/negative.log")"
 ok "$(tail -1 "$WORK/negative.log")"
 # The two front ends share the safetensors reader: a BOOL artifact written by the DSL is a coded lmapi refusal.
-printf 'p = _dsl_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
+printf 'p = _dsl_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
 "$LMSCRIPT" "$WORK/bools.lms" >/dev/null
 (cd "$WORK" && "$BIN" --dsl bools.dslb >/dev/null) || fail "writing a BOOL artifact"
 set +e; (cd "$WORK" && "$BIN" tensor_inspect --input bools.safetensors#tensor) > "$WORK/bools.json"; code=$?; set -e
 [ "$code" = 2 ] && grep -q '"tool_code": "INVALID_DTYPE"' "$WORK/bools.json" || fail "lmapi on a BOOL artifact: exit $code $(cat "$WORK/bools.json")"
 ok "a DSL-written BOOL artifact is a coded lmapi refusal (INVALID_DTYPE)"
-printf 'p = _dsl_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _dsl_\n' "$HERE/schema/lmtorch.dsl.json" > "$WORK/illtyped.lms"
+printf 'p = _dsl_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _dsl_\n' "$HERE_N/schema/lmtorch.dsl.json" > "$WORK/illtyped.lms"
 set +e; "$LMSCRIPT" --check "$WORK/illtyped.lms" > "$WORK/illtyped.log" 2>&1; code=$?; set -e
 [ "$code" = 2 ] && grep -q 'illtyped.lms:2:' "$WORK/illtyped.log" || fail "ill-typed chunk: exit $code $(cat "$WORK/illtyped.log")"
 ok "an ill-typed chunk is a located compile error (exit 2) before anything runs"
@@ -97,7 +135,7 @@ ok "an ill-typed chunk is a located compile error (exit 2) before anything runs"
 # Every _dsl_ example, from a scratch workspace (outputs must stay inside the working directory).
 run_example() {
   local name="$1" expect="$2"; shift 2
-  (cd "$WORK" && "$LMSCRIPT" "$HERE/examples/$name.lms" "$@") > "$WORK/$name.log" 2>&1 || fail "$name: $(cat "$WORK/$name.log")"
+  (cd "$WORK" && "$LMSCRIPT" "$HERE_N/examples/$name.lms" "$@") > "$WORK/$name.log" 2>&1 || fail "$name: $(cat "$WORK/$name.log")"
   grep -qF -- "$expect" "$WORK/$name.log" || fail "$name output lacks '$expect': $(cat "$WORK/$name.log")"
   ok "example $name"
 }
@@ -124,10 +162,10 @@ done
 ok "every example passes lmscript --check"
 
 if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, numpy' 2>/dev/null; then
-  "$ORACLE_PYTHON" tests/dsl_oracle.py "$BIN" "$LMSCRIPT" > "$WORK/oracle.log" 2>&1 || fail "DSL oracle: $(tail -20 "$WORK/oracle.log")"
+  "$ORACLE_PYTHON" tests/dsl_oracle.py "$BIN" "$LMSCRIPT_PY" > "$WORK/oracle.log" 2>&1 || fail "DSL oracle: $(tail -20 "$WORK/oracle.log")"
   ok "$(tail -1 "$WORK/oracle.log")"
   [ -x "$UNIT" ] && { "$ORACLE_PYTHON" tests/integration.py "$BIN" "$UNIT" tests/torch_oracle.py > "$WORK/integration.log" 2>&1 || fail "lmapi oracle: $(tail -20 "$WORK/integration.log")"; ok "lmapi 12-operation Torch oracle and 21 regression cases"; }
 else
-  echo "# skipped: PyTorch oracles (set ORACLE_PYTHON to a python with torch, safetensors and numpy)"
+  echo "# skipped: PyTorch oracles (set ORACLE_PYTHON to a python with torch, safetensors and numpy; PyTorch publishes no torch 2.9.1 wheel for macOS x86_64)"
 fi
 echo "lmtorch native tests: $pass passed"

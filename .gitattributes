@@ -1,0 +1,5 @@
+# Windows checkouts must not convert to CRLF: sdk.lock pins the vendored dslvm.hpp by sha256, the DSL schema is embedded
+# and asserted byte-identical (--dsl-schema --json), and --schema must equal cli.schema.dev.json byte for byte.
+* text=auto eol=lf
+*.safetensors binary
+*.dslb binary
