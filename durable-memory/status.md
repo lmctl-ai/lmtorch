@@ -45,7 +45,7 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 
 - `_dsl_ cli="lmtorch"` (lmscript R42, lmctl-mono 0795e69f, 2026-10-20): the compiler takes the schema from
   `lmtorch --dsl-schema --json`; lmtorch adds `--cli-schema`. lmscript 0.2.359 (npm) ships R42 + R43.
-- Examples (2026-10-20): every `_dsl_` block is `cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0"`; the helpers
+- Examples (2026-10-20): every `_dsl_` block is `cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0"` (v0.3.0 had Linux assets only); the helpers
   run `system ${dsl_cli(prog)} --dsl ...` (lib/torchdsl.lms: `run(prog, files)`, `run_block(prog, path)`; LMTORCH_BIN no
   longer selects the binary for examples, PATH does). New install-and-run-dsl.lms is the minimal form. test.sh puts the
   binary under test first on PATH, gives lmscript a private LMSCRIPT_TOOL_CACHE and fails if any example downloaded.
