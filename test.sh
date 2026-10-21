@@ -48,6 +48,14 @@ export LMTORCH_BIN="$BIN"
 LMSCRIPT_PY="$LMSCRIPT"
 [ "$OS" = windows ] && [ -f "$LMSCRIPT.cmd" ] && LMSCRIPT_PY="$(npath "$LMSCRIPT.cmd")"
 
+# Smoke run first, so a binary that cannot start (a missing DLL, a crash in a static initializer) is reported with its
+# exit status instead of as an empty schema.
+set +e; "$BIN" --dsl-schema --json > "$WORK/smoke.json" 2> "$WORK/smoke.err"; code=$?; set -e
+if [ "$code" != 0 ] || [ ! -s "$WORK/smoke.json" ]; then
+  echo "# $BIN --dsl-schema --json: exit $code, $(wc -c < "$WORK/smoke.json" | tr -d ' ') bytes; stderr: $(head -c 2000 "$WORK/smoke.err")" >&2
+  if [ "$OS" = windows ] && command -v dumpbin >/dev/null 2>&1; then dumpbin -nologo -dependents "$BIN" >&2 || true; fi
+  fail "$BIN does not start (exit $code)"
+fi
 scripts/sync-sdk.sh --verify >/dev/null || fail "third_party/dslvm/dslvm.hpp differs from sdk.lock"
 ok "vendored dslvm.hpp matches sdk.lock"
 printf 'p = _dsl_ schema="%s";\nwhile (false) {}\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
