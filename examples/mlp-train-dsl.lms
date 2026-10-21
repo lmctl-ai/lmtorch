@@ -4,7 +4,7 @@
 # lmapi operation mlp_forward (same executable, schema import) scores the DSL-written checkpoint: both paths agree.
 # Run: lmscript examples/mlp-train-dsl.lms [run_dir]        (lmtorch on PATH: the schema import launches it by name)
 import "./lib/torchdsl.lms";
-import "../cli.schema.dev.json" as lmtorch;
+import "github:lmctl-ai/lmtorch@v0.4.0 lmtorch";
 
 RUN = ARGV.get(0, "artifacts/mlp-train-dsl");
 mkdir(RUN, true);

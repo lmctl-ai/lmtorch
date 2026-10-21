@@ -2,8 +2,10 @@
 
 Two ways to drive the same `lmtorch` binary from lmscript:
 
-- **lmapi operations** (`*.lms` without `-dsl`): `import "../cli.schema.dev.json" as lmtorch;` makes each of the twelve
-  operations a function; every call is one lmtorch process and tensors travel through safetensors files.
+- **lmapi operations** (`*.lms` without `-dsl`): `import "github:lmctl-ai/lmtorch@v0.4.0 lmtorch";` (lmscript >= 0.2.366)
+  makes each of the twelve operations a function; every call is one lmtorch process and tensors travel through
+  safetensors files. The schema comes from the binary (`lmtorch --cli-schema --json`), the binary is lmtorch on PATH or
+  else that release (installed exactly like `install=` below), and every call runs that exact binary.
 - **`_dsl_` programs** (`*-dsl.lms`): a `_dsl_` block is compiled by lmscript into bytecode (`savedsl`), and
   `lmtorch --dsl FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
   memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).

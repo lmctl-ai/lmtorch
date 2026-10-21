@@ -1,4 +1,4 @@
-import "../cli.schema.dev.json" as lmtorch;
+import "github:lmctl-ai/lmtorch@v0.4.0 lmtorch";
 
 RUN = len(ARGV) > 0 ? ARGV[0] : "artifacts/mlp-train";
 mkdir(RUN, true);

@@ -49,7 +49,9 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   run `system ${dsl_cli(prog)} --dsl ...` (lib/torchdsl.lms: `run(prog, files)`, `run_block(prog, path)`; LMTORCH_BIN no
   longer selects the binary for examples, PATH does). New install-and-run-dsl.lms is the minimal form. test.sh puts the
   binary under test first on PATH, gives lmscript a private LMSCRIPT_TOOL_CACHE and fails if any example downloaded.
-  Bump the install= tag in every example (and docs/dsl-api.md, examples/README.md) with each release.
+  lmapi recipes (and mlp-train-dsl's cross-check) import `github:lmctl-ai/lmtorch@v0.4.0 lmtorch` (lmscript R44,
+  >= 0.2.366): schema from `lmtorch --cli-schema --json`, calls run that binary; the test.sh no-download guard runs
+  after them. Bump the install= / import tag in every example (and docs/dsl-api.md, examples/README.md) with each release.
 
 ## Pending
 - No BLAS (portable GEMM; no linalg) on any OS. Release binaries are not code-signed or notarized.

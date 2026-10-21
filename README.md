@@ -41,7 +41,7 @@ Invoke-WebRequest https://github.com/lmctl-ai/lmtorch/releases/latest/download/l
 `lmtorch-<platform>.sha256` lists the checksums. The archive (`lmtorch-<platform>.tar.gz`, `lmtorch-windows-x64.zip` on
 Windows) holds the same executable with `LICENSE`, `THIRD_PARTY_NOTICES.md` and every bundled license. The binaries are
 not code-signed: a macOS download through a browser needs `xattr -d com.apple.quarantine lmtorch`, and Windows
-SmartScreen may ask once. Compiling `_dsl_` programs needs `lmscript` >= 0.2.359 (`npm install -g @lmctl-ai/lmctl`,
+SmartScreen may ask once. Running the examples needs `lmscript` >= 0.2.366 (`npm install -g @lmctl-ai/lmctl`,
 Node.js >= 24.15).
 
 ## Build from source
@@ -59,7 +59,7 @@ revision `93a1847c081894ab1e9ed02ad5ea6350b5d5bd06` (`LMCPP_DIR`, default `../..
 libtorch build only a Python 3 with `pyyaml` and `typing_extensions` (torchgen code generation; nothing Python is linked).
 On Windows the scripts run under Git Bash inside a Visual Studio x64 developer environment (`vcvars64.bat`) and build
 with the static MSVC runtime (`/MT`); on macOS `MACOSX_DEPLOYMENT_TARGET` (default 13.0) sets the floor.
-Compiling `_dsl_` programs needs `lmscript` >= 0.2.359 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
+Running the examples needs `lmscript` >= 0.2.366 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
 
 For development, `scripts/build-native.sh --dev` builds `build-dev/bin/lmtorch` against a PyTorch wheel's shared libtorch
 (`TORCH_PYTHON`, default `~/.cache/lmtorch/oracle-venv/bin/python`). `test.sh` tests whichever binary exists
