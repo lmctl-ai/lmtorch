@@ -41,7 +41,8 @@ have="$(git -C "$SRC" rev-parse HEAD)"
 # Every optional backend, accelerator, distributed, profiler and Python binding is off: only the CPU
 # tensor library, its native kernels and autograd remain. No BLAS/LAPACK: ATen's portable GEMM is used. USE_BLAS=OFF alone
 # is not enough: Dependencies.cmake falls back to find_package(BLAS) and find_package(LAPACK) unconditionally, which find
-# Accelerate on macOS (and would find any system BLAS on Linux), so both lookups are disabled.
+# Accelerate on macOS (and would find any system BLAS on Linux). Disabling the BLAS lookup is enough: FindLAPACK only
+# accepts a LAPACK matching the BLAS found (and disabling LAPACK itself breaks configure: it includes CheckFunctionExists).
 cmake -S "$(native "$SRC")" -B "$(native "$BUILD")" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$(native "$PREFIX")" \
@@ -54,7 +55,7 @@ cmake -S "$(native "$SRC")" -B "$(native "$BUILD")" -G Ninja \
   -DUSE_NNPACK=OFF -DUSE_QNNPACK=OFF -DUSE_PYTORCH_QNNPACK=OFF -DUSE_XNNPACK=OFF \
   -DUSE_KINETO=OFF -DUSE_ITT=OFF -DUSE_NUMPY=OFF -DUSE_OPENMP=OFF -DUSE_MIMALLOC=OFF \
   -DUSE_BLAS=OFF -DUSE_LAPACK=OFF -DBLAS=Eigen -DUSE_MAGMA=OFF -DUSE_NUMA=OFF \
-  -DCMAKE_DISABLE_FIND_PACKAGE_BLAS=ON -DCMAKE_DISABLE_FIND_PACKAGE_LAPACK=ON \
+  -DCMAKE_DISABLE_FIND_PACKAGE_BLAS=ON \
   -DUSE_GFLAGS=OFF -DUSE_GLOG=OFF -DUSE_OPENCV=OFF -DUSE_PRECOMPILED_HEADERS=OFF \
   -DUSE_FLASH_ATTENTION=OFF -DUSE_MEM_EFF_ATTENTION=OFF -DUSE_PRIORITIZED_TEXT_FOR_LD=OFF \
   -DATEN_NO_TEST=ON ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"}
