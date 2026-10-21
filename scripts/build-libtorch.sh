@@ -34,6 +34,15 @@ fi
 have="$(git -C "$SRC" rev-parse HEAD)"
 [ -z "$COMMIT" ] || [ "$have" = "$COMMIT" ] || { echo "pytorch source is at $have, libtorch.lock pins $COMMIT" >&2; exit 1; }
 
+# PyTorch forces USE_MIMALLOC ON for WIN32 (CMakeLists.txt `if(WIN32) set(USE_MIMALLOC ON)`, ignoring -DUSE_MIMALLOC=OFF).
+# Linked statically into an /MT executable, mimalloc initializes from a TLS callback before the static CRT has created its
+# heap, and the process faults before main (cdb: mi_process_init -> operator new -> RtlAllocateHeap). The source tree is
+# patched to honour the option; the checked-out commit stays the pinned one. Without mimalloc c10 uses _aligned_malloc.
+if [ "$OS" = windows ]; then
+  sed -i 's/^  set(USE_MIMALLOC ON)/  set(USE_MIMALLOC OFF)/' "$SRC/CMakeLists.txt"   # no $: the checkout may have CRLF
+  grep -q '^  set(USE_MIMALLOC OFF)' "$SRC/CMakeLists.txt" || { echo "cannot turn mimalloc off in $SRC/CMakeLists.txt" >&2; exit 1; }
+fi
+
 # torchgen needs PyYAML and typing_extensions at build time only.
 "$PYTHON" -c 'import yaml, typing_extensions' 2>/dev/null || {
   echo "build-time Python needs pyyaml and typing_extensions (pip install pyyaml typing_extensions)" >&2; exit 1; }

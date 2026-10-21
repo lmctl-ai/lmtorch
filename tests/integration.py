@@ -153,7 +153,7 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-test-", ignore_cleanup_errors=T
     for val,dtype in (("not-a-number","F32"),(1e100,"F32"),(1.5,"I64"),(9223372036854775808,"I64")):
         rejected("VALIDATION_ERROR","tensor_create","--input-json",json.dumps({"shape":[1],"dtype":dtype,"values":[val],"out":os.path.join(d,"bad-value.safetensors")}))
     exact_i64=os.path.join(d,"exact-i64.safetensors")
-    result("tensor_create","--input-json",'{"shape":[1],"dtype":"I64","values":[9007199254740993],"out":"'+exact_i64+'"}')
+    result("tensor_create","--input-json",'{"shape":[1],"dtype":"I64","values":[9007199254740993],"out":'+json.dumps(exact_i64)+'}')
     assert load_file(exact_i64)["tensor"].item()==9007199254740993
     rejected("VALIDATION_ERROR","tensor_softmax","--input",paths["a"]+"#tensor","--dim",9223372036854775808,"--out",os.path.join(d,"bad-dim.safetensors"))
     rejected("VALIDATION_ERROR","tensor_create","--shape","2","--out","../lmtorch-escape.safetensors")
