@@ -84,6 +84,8 @@ if(LMTORCH_LIBTORCH_PREFIX)
     foreach(lib ${LMTORCH_WHOLE})
       target_link_options(lmtorch PRIVATE "/WHOLEARCHIVE:${lib}")
     endforeach()
+    list(FILTER LMTORCH_ARCHIVES EXCLUDE REGEX "/mimalloc[^/]*\\.lib$")
+    target_sources(lmtorch PRIVATE src/win_mimalloc_shim.cpp)
     target_link_libraries(lmtorch PRIVATE ${LMTORCH_WHOLE} ${LMTORCH_ARCHIVES})
     # A PDB next to the executable for crash stacks (not shipped); /OPT:REF,ICF keep the image as without /DEBUG.
     target_link_options(lmtorch PRIVATE /DEBUG /OPT:REF /OPT:ICF)
