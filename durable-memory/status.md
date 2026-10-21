@@ -28,10 +28,12 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 - License: MIT (`LICENSE`, byte-identical to lmcpp/lmrust/lmcad, sha256 949eb9b7...). No Rust is involved.
 - `examples/`: three lmapi recipes plus a `-dsl` version of each, train-report-dsl (its lmapi original was removed: it needed
   the private lmcreator), and five multi-step DSL tasks.
-- Tests: `./test.sh` (testing.md): 31 gates on a release build (29 on macos-x64, where PyTorch publishes no oracle wheel),
-  30 on a dev build. CI run 39545682710 (2026-10-21) passed all seven jobs; mlp-train stays at 6 digits on every OS.
+- Tests: `./test.sh` (testing.md): 32 gates on a release build (fewer on macos-x64, where PyTorch publishes no oracle
+  wheel, and on a dev build). CI run 39545682710 (2026-10-21) passed all seven jobs; mlp-train stays at 6 digits on every OS.
 - CI evidence (public repo): runs 39418714985 and 39423349623 passed all four jobs (release and dev, x64 and arm64), with
   both PyTorch oracle suites running; the libtorch caches for both runners are saved, so a release run takes minutes.
+- Latest release: v0.4.1 (2026-10-21, run 39626812648, adds `--version`), same 15 assets. The release job fails when
+  the tag differs from `lmtorch --version` (CMake project VERSION): bump it before tagging.
 - Released: v0.4.0 (2026-10-21, tag run 39559055428): 15 assets, `lmtorch-{linux-x64,linux-arm64,macos-arm64,macos-x64}`
   + `.tar.gz` + `.sha256` and `lmtorch-windows-x64.exe` + `.zip` + `.sha256` (stripped sizes 147/123/105/144 MB, Windows
   105 MB). Smoke-tested on aarch64: checksums OK, `--dsl-schema --json` byte-identical, version string
@@ -52,6 +54,9 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   lmapi recipes (and mlp-train-dsl's cross-check) import `github:lmctl-ai/lmtorch@latest lmtorch` (lmscript R44,
   >= 0.2.366): schema from `lmtorch --cli-schema --json`, calls run that binary; the test.sh no-download guard runs
   after them. `@latest` needs `lmtorch --version` (added in 0.4.1, released 2026-10-21; verified from an empty cache: @latest installed v0.4.1, both the _dsl_ and the import examples ran, --check then worked offline). No tag bumps are needed in the examples or docs at a release.
+
+- Sibling hosts (2026-10-21): lmcad v0.1.3 and lmhtml v0.7.3 add `--version` (same CMake-VERSION source and release-job
+  tag guard), so `install="github:lmctl-ai/{lmcad,lmhtml}@latest"` works; verified from an empty cache on linux-arm64.
 
 ## Pending
 - No BLAS (portable GEMM; no linalg) on any OS. Release binaries are not code-signed or notarized.
