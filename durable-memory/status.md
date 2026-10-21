@@ -32,7 +32,12 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   30 on a dev build. CI run 39545682710 (2026-10-21) passed all seven jobs; mlp-train stays at 6 digits on every OS.
 - CI evidence (public repo): runs 39418714985 and 39423349623 passed all four jobs (release and dev, x64 and arm64), with
   both PyTorch oracle suites running; the libtorch caches for both runners are saved, so a release run takes minutes.
-- Released: v0.3.0 (2026-10-20, run 39447192609): `lmtorch-linux-{x64,arm64}` (147 MB / 123 MB stripped), `.tar.gz`,
+- Released: v0.4.0 (2026-10-21, tag run 39559055428): 15 assets, `lmtorch-{linux-x64,linux-arm64,macos-arm64,macos-x64}`
+  + `.tar.gz` + `.sha256` and `lmtorch-windows-x64.exe` + `.zip` + `.sha256` (stripped sizes 147/123/105/144 MB, Windows
+  105 MB). Smoke-tested on aarch64: checksums OK, `--dsl-schema --json` byte-identical, version string
+  `lmtorch 0.4.0 (libtorch 2.9.1, CPU)`, checkpoint-resume-dsl (lmscript 0.2.359, release binary first on PATH, nothing
+  downloaded) prints `checkpoints bit-identical: true`. macOS and Windows assets are CI-tested only (no local hardware).
+- Earlier: v0.3.0 (2026-10-20, run 39447192609): `lmtorch-linux-{x64,arm64}` (147 MB / 123 MB stripped), `.tar.gz`,
   `.sha256`. Smoke-tested on aarch64: checksum OK, `--dsl-schema --json` byte-identical, checkpoint-resume-dsl correct.
 - Bugs fixed (all with regression tests): see the commit history of 2026-10-20 and testing.md (ragged literals reading
   uninitialized memory, uncaught lmcpp::Error aborting the process, BOOL payload bytes, grad mode leaking across files,
