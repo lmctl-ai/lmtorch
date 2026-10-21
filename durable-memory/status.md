@@ -51,7 +51,7 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   binary under test first on PATH, gives lmscript a private LMSCRIPT_TOOL_CACHE and fails if any example downloaded.
   lmapi recipes (and mlp-train-dsl's cross-check) import `github:lmctl-ai/lmtorch@latest lmtorch` (lmscript R44,
   >= 0.2.366): schema from `lmtorch --cli-schema --json`, calls run that binary; the test.sh no-download guard runs
-  after them. `@latest` needs `lmtorch --version` (added in 0.4.1; v0.4.0 and older lack it, so @latest works from v0.4.1 on). No tag bumps are needed in the examples or docs at a release.
+  after them. `@latest` needs `lmtorch --version` (added in 0.4.1, released 2026-10-21; verified from an empty cache: @latest installed v0.4.1, both the _dsl_ and the import examples ran, --check then worked offline). No tag bumps are needed in the examples or docs at a release.
 
 ## Pending
 - No BLAS (portable GEMM; no linalg) on any OS. Release binaries are not code-signed or notarized.
