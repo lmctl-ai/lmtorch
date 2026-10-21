@@ -1,14 +1,14 @@
 # The zero-setup way to use lmtorch from lmscript: no schema file and no manual install.
 #   - cli="lmtorch" makes lmscript ask the lmtorch binary for its schema (`lmtorch --dsl-schema --json`) and compile against
 #     exactly those bytes, so the bytecode is bound to the binary that will run it;
-#   - install="github:lmctl-ai/lmtorch@v0.4.0" says where lmtorch comes from when it is not on PATH: lmscript downloads the
+#   - install="github:lmctl-ai/lmtorch@latest" says where lmtorch comes from when it is not on PATH: lmscript downloads the
 #     release asset lmtorch-OS-ARCH[.exe] once into its tool cache, verified against the SHA-256 digest GitHub reports, and
 #     uses it from then on;
 #   - dsl_cli(p) is the argv prefix of that exact binary, so `system ${dsl_cli(p)} --dsl FILE` runs it.
 # The program itself: a matrix product, an autograd gradient and a two-parameter least-squares fit, with known answers.
 # Run: lmscript examples/install-and-run-dsl.lms   (works on a machine with only Node.js and lmscript installed)
 
-p = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+p = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let a = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]");
 out.set("matmul_sum", a.matmul(a).sum().item());
 let x = torch.tensor("[1.0, 2.0, 3.0]").requires_grad(true);

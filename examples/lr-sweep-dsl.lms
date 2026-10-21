@@ -18,7 +18,7 @@ prog = null;   # any compiled sweep block: dsl_cli() of each names the same lmto
 for (i = 0; i < len(RATES); i = i + 1) {
   LR_MICRO = round(RATES[i] * 1000000);
   KEY = f"lr{i}";
-  sweep = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+  sweep = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 torch.manual_seed(1);
 let x = torch.linspace(-1.0, 1.0, 64).reshape(64, 1);
 let y = (x * 3.0).sin();
@@ -57,7 +57,7 @@ println(f"2 select: lr {LR}");
 
 LR_MICRO = round(LR * 1000000);
 LONG = STEPS * 5;
-refine = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+refine = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.manual_seed(1);
 let x = torch.linspace(-1.0, 1.0, 64).reshape(64, 1);
@@ -76,7 +76,7 @@ for (step in range(0, ${LONG})) {
 model.save(run + "/best.safetensors");
 end _dsl_
 
-verify = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+verify = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.grad_enabled(false);
 let model = torch.load_model(run + "/best.safetensors");

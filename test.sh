@@ -83,6 +83,11 @@ ok "--dsl-schema summary lists every member"
 ok "lmapi --schema is byte-identical to cli.schema.dev.json"
 for flags in "--cli-schema" "--cli-schema --json"; do "$BIN" $flags | cmp - cli.schema.dev.json || fail "$flags differs from cli.schema.dev.json"; done
 ok "host flag standard: --cli-schema [--json] prints the lmapi document, --dsl-schema --json the DSL schema"
+want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)"
+[ "$("$BIN" --version)" = "$want" ] || fail "--version: '$("$BIN" --version)' (want '$want')"
+set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
+[ "$code" = 2 ] || fail "--version with an extra argument must be refused (exit $code)"
+ok "--version prints '$want' (host flag standard; lmscript install=...@latest compares it with the release tag)"
 # _dsl_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
 printf 'p = _dsl_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _dsl_\nsavedsl(p, "%s");\n' "$BIN" "$WORK/cli.dslb" > "$WORK/cli.lms"
 if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then

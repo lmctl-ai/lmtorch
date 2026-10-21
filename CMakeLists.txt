@@ -4,7 +4,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
 # Windows: the static MSVC runtime (/MT) in every target, matching scripts/build-libtorch.sh, so lmtorch.exe needs no
 # Visual C++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "MSVC runtime library")
-project(lmtorch VERSION 0.4.0 LANGUAGES C CXX)
+project(lmtorch VERSION 0.4.1 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -44,6 +44,8 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/dsl_schema_embedded.hpp.tmp"
 configure_file("${CMAKE_CURRENT_BINARY_DIR}/generated/dsl_schema_embedded.hpp.tmp" "${CMAKE_CURRENT_BINARY_DIR}/generated/dsl_schema_embedded.hpp" COPYONLY)
 
 add_executable(lmtorch src/main.cpp src/safetensors.cpp src/ops.cpp src/dsl_host.cpp)
+# One version: --version (host flag standard, R45 @latest compares it with the release tag) and Torch.version().
+target_compile_definitions(lmtorch PRIVATE LMTORCH_VERSION="${PROJECT_VERSION}")
 target_include_directories(lmtorch PRIVATE include third_party/dslvm "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(MSVC)
   # /Zc:preprocessor and /permissive- as libtorch is built; /bigobj for the dispatcher-heavy translation units.

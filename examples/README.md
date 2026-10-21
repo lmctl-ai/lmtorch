@@ -2,7 +2,7 @@
 
 Two ways to drive the same `lmtorch` binary from lmscript:
 
-- **lmapi operations** (`*.lms` without `-dsl`): `import "github:lmctl-ai/lmtorch@v0.4.0 lmtorch";` (lmscript >= 0.2.366)
+- **lmapi operations** (`*.lms` without `-dsl`): `import "github:lmctl-ai/lmtorch@latest lmtorch";` (lmscript >= 0.2.366)
   makes each of the twelve operations a function; every call is one lmtorch process and tensors travel through
   safetensors files. The schema comes from the binary (`lmtorch --cli-schema --json`), the binary is lmtorch on PATH or
   else that release (installed exactly like `install=` below), and every call runs that exact binary.
@@ -10,13 +10,16 @@ Two ways to drive the same `lmtorch` binary from lmscript:
   `lmtorch --dsl FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
   memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).
 
-Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0"` (lmscript >= 0.2.359): no schema file and
+Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (lmscript >= 0.2.366): no schema file and
 no manual install.
 
 - `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --dsl-schema --json`) and compiles against exactly
   those bytes, so the bytecode is bound to the binary that runs it.
-- `install=`: when `lmtorch` is not on PATH, lmscript downloads the release asset `lmtorch-OS-ARCH[.exe]` once into its
-  tool cache (`~/.cache/lmscript/tools`, or `LMSCRIPT_TOOL_CACHE`), verified against GitHub's SHA-256 digest.
+- `install=`: when `lmtorch` is not on PATH, lmscript downloads the release asset `lmtorch-OS-ARCH[.exe]` into its
+  tool cache (`~/.cache/lmscript/tools`, or `LMSCRIPT_TOOL_CACHE`), verified against GitHub's SHA-256 digest. `@latest`
+  (lmscript R45) is the newest release: each real run asks GitHub for it and replaces the cached binary when its
+  `lmtorch --version` differs, so a new release needs no edit here. `--check` never uses the network, so on a fresh
+  machine run the script once first. Pin a tag (`@v0.4.1`) for reproducible or offline use.
 - `dsl_cli(p)`: the argv prefix of that exact binary; the helpers run `system ${dsl_cli(p)} --dsl FILE...`.
 
 [install-and-run-dsl.lms](install-and-run-dsl.lms) is the minimal version of this. Run from the repository root; outputs

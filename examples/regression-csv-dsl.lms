@@ -23,7 +23,7 @@ CSV = path_join(RUN, "houses.csv");
 write_file(CSV, join(rows, "\n") + "\n");
 println(f"1 data: {len(rows) - 1} rows -> {CSV}");
 
-fit = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+fit = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let table = torch.read_csv(${CSV}, true);
 let x = table.slice(1, 0, 3);

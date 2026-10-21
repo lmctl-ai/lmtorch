@@ -9,7 +9,7 @@ RUN = ARGV.get(0, "artifacts/checkpoint-resume-dsl");
 mkdir(RUN, true);
 
 
-straight = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+straight = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.manual_seed(5);
 let x = torch.randn(64, 3);
@@ -29,7 +29,7 @@ for (step in range(0, 40)) {
 model.save(run + "/a-40.safetensors");
 end _dsl_
 
-first_half = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+first_half = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let data = torch.open(run + "/data.safetensors");
 let model = torch.load_model(run + "/init.safetensors");
@@ -44,7 +44,7 @@ for (step in range(0, 20)) {
 model.save(run + "/b-20.safetensors");
 end _dsl_
 
-second_half = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+second_half = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let data = torch.open(run + "/data.safetensors");
 let model = torch.load_model(run + "/b-20.safetensors");
@@ -59,7 +59,7 @@ for (step in range(0, 20)) {
 model.save(run + "/b-40.safetensors");
 end _dsl_
 
-compare = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
+compare = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let a = torch.open(run + "/a-40.safetensors");
 let b = torch.open(run + "/b-40.safetensors");
