@@ -21,7 +21,7 @@ chmod +x lmtorch-linux-arm64 && mv lmtorch-linux-arm64 ~/.local/bin/lmtorch
 ```
 
 The `.tar.gz` asset holds the same executable with `LICENSE`, `THIRD_PARTY_NOTICES.md` and every bundled license.
-Compiling `_dsl_` programs needs `lmscript` >= 0.2.346 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
+Compiling `_dsl_` programs needs `lmscript` >= 0.2.359 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
 
 ## Build from source
 
@@ -34,7 +34,7 @@ scripts/build-native.sh            # build/bin/lmtorch: everything static except
 Requirements: GCC or Clang with C++17, CMake >= 3.27 (PyTorch's minimum), Ninja, git, `nlohmann-json3-dev`, the lmcpp checkout containing
 revision `f6c6f51797912a369d6b27cf9e96f148a9a0e4d1` (`LMCPP_DIR`, default `../../lmctl-ai/lmcpp` or `../lmcpp`), and for the
 libtorch build only a Python 3 with `pyyaml` and `typing_extensions` (torchgen code generation; nothing Python is linked).
-Compiling `_dsl_` programs needs `lmscript` >= 0.2.346 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
+Compiling `_dsl_` programs needs `lmscript` >= 0.2.359 (`npm install -g @lmctl-ai/lmctl`, Node.js >= 24.15).
 
 For development, `scripts/build-native.sh --dev` builds `build-dev/bin/lmtorch` against a PyTorch wheel's shared libtorch
 (`TORCH_PYTHON`, default `~/.cache/lmtorch/oracle-venv/bin/python`). `test.sh` tests whichever binary exists

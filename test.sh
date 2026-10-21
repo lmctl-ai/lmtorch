@@ -35,9 +35,12 @@ pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
-[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.346), or set LMSCRIPT_BIN"
-# Schema-module imports and the example helper launch lmtorch by name.
+[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.359), or set LMSCRIPT_BIN"
+# Schema-module imports and the examples' cli="lmtorch" blocks find lmtorch by name, so the binary under test is first on
+# PATH; install= must then never download. An empty private tool cache proves it after the examples (below).
+[ "$(basename "$BIN")" = "lmtorch$EXE" ] || fail "LMTORCH_BIN must be named lmtorch$EXE (cli=\"lmtorch\" looks it up on PATH): $BIN"
 export PATH="$BIN_DIR:$PATH"
+export LMSCRIPT_TOOL_CACHE="$WORK/tool-cache"
 BIN="$(npath "$BIN")"
 UNIT="$(npath "$UNIT")"
 export LMTORCH_BIN="$BIN"
@@ -149,6 +152,9 @@ run_example lr-sweep-dsl "2 select: lr 0.2"
 run_example checkpoint-resume-dsl "checkpoints bit-identical: true"
 run_example cnn-bars-dsl "2 classify picture 4: vertical"
 run_example regression-csv-dsl "coefficients within 0.25 of the generating formula"
+run_example install-and-run-dsl "Install-and-run passed."
+[ ! -e "$WORK/tool-cache" ] || fail "an example downloaded a release instead of using the binary under test: $(find "$WORK/tool-cache" -type f)"
+ok "cli=\"lmtorch\" blocks bound to the binary under test (install= downloaded nothing)"
 # The lmapi recipes run against the same native binary (no docker shim).
 run_example tensor-chain "[0.5,0.5,0.5,0.5]" "artifacts/recipe-chain"
 run_example grad-check "dx: [2,-4,6] loss: 14" "artifacts/recipe-grad"

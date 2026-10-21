@@ -8,11 +8,21 @@ Two ways to drive the same `lmtorch` binary from lmscript:
   `lmtorch --dsl FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
   memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).
 
-Run from the repository root with the binary on PATH (or `LMTORCH_BIN=/path/to/lmtorch`); outputs go to
-`artifacts/<example>/` below the working directory, which lmtorch requires:
+Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0"` (lmscript >= 0.2.359): no schema file and
+no manual install.
+
+- `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --dsl-schema --json`) and compiles against exactly
+  those bytes, so the bytecode is bound to the binary that runs it.
+- `install=`: when `lmtorch` is not on PATH, lmscript downloads the release asset `lmtorch-OS-ARCH[.exe]` once into its
+  tool cache (`~/.cache/lmscript/tools`, or `LMSCRIPT_TOOL_CACHE`), verified against GitHub's SHA-256 digest.
+- `dsl_cli(p)`: the argv prefix of that exact binary; the helpers run `system ${dsl_cli(p)} --dsl FILE...`.
+
+[install-and-run-dsl.lms](install-and-run-dsl.lms) is the minimal version of this. Run from the repository root; outputs
+go to `artifacts/<example>/` below the working directory, which lmtorch requires. To use a local build instead of the
+release, put it first on PATH:
 
 ```sh
-export PATH="$PWD/build/bin:$PATH"
+export PATH="$PWD/build/bin:$PATH"   # optional: a local build wins over install=
 lmscript examples/classify-moons-dsl.lms
 ```
 

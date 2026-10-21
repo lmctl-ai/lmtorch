@@ -2,22 +2,24 @@
 
 `schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5). `lmtorch --dsl-schema` prints this list grouped by
 type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs, so a block can name the binary
-instead of a schema file: `prog = _dsl_ cli="lmtorch";` (lmscript R42, newer than the published 0.2.347) compiles against
-the installed binary's own schema, which can never drift from the binary that runs it. `lmtorch --cli-schema` prints the
+instead of a schema file: `prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";` (lmscript >= 0.2.359)
+compiles against the binary's own schema, which can never drift from the binary that runs it. `install=` downloads that
+release (verified against GitHub's SHA-256 digest) when lmtorch is not on PATH, and `dsl_cli(prog)` is the argv prefix of
+the binary the block was compiled against. `lmtorch --cli-schema` prints the
 lmapi document (the same as lmapi's `--schema`); `lmtorch --dsl-signatures` prints
 the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatures schema/lmtorch.dsl.json`.
 
 A program is an lmscript `_dsl_` block compiled to bytecode and run by the native host:
 
 ```lmscript
-prog = _dsl_ schema="../schema/lmtorch.dsl.json";
+prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
 let x = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]").requires_grad(true);
 let loss = (x.matmul(x) + 1.0).square().mean();
 loss.backward();
 out.set("loss", loss.item()).set("grad", x.grad());
 end _dsl_
 savedsl(prog, "prog.dslb");
-r = system(["lmtorch", "--dsl", "prog.dslb"]);   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
+r = system ${dsl_cli(prog)} --dsl prog.dslb;   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
 ```
 
 The language is the lmscript DSL (typed `let`, `if`/`else`, `switch`, `while`, `for (i in range(a, b))`, `for (x in list)`,

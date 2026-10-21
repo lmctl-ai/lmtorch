@@ -14,10 +14,11 @@ mkdir(RUN, true);
 RATES = [0.0005, 0.005, 0.02, 0.05, 0.2, 3.0];
 
 files = [];
+prog = null;   # any compiled sweep block: dsl_cli() of each names the same lmtorch
 for (i = 0; i < len(RATES); i = i + 1) {
   LR_MICRO = round(RATES[i] * 1000000);
   KEY = f"lr{i}";
-  sweep = _dsl_ schema="../schema/lmtorch.dsl.json";
+  sweep = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
 torch.manual_seed(1);
 let x = torch.linspace(-1.0, 1.0, 64).reshape(64, 1);
 let y = (x * 3.0).sin();
@@ -38,8 +39,9 @@ end _dsl_
   path = path_join(RUN, f"sweep-{i}.dslb");
   savedsl(sweep, path);
   push(files, path);
+  prog = sweep;
 }
-res = torchdsl.run(files);
+res = torchdsl.run(prog, files);
 if (res == null) { exit(0); }
 
 BEST = -1;
@@ -55,7 +57,7 @@ println(f"2 select: lr {LR}");
 
 LR_MICRO = round(LR * 1000000);
 LONG = STEPS * 5;
-refine = _dsl_ schema="../schema/lmtorch.dsl.json";
+refine = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
 let run = ${RUN};
 torch.manual_seed(1);
 let x = torch.linspace(-1.0, 1.0, 64).reshape(64, 1);
@@ -74,7 +76,7 @@ for (step in range(0, ${LONG})) {
 model.save(run + "/best.safetensors");
 end _dsl_
 
-verify = _dsl_ schema="../schema/lmtorch.dsl.json";
+verify = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
 let run = ${RUN};
 torch.grad_enabled(false);
 let model = torch.load_model(run + "/best.safetensors");
@@ -86,7 +88,7 @@ out.check(err.max().item() < 0.1, "held-out error is too large");
 end _dsl_
 savedsl(refine, path_join(RUN, "refine.dslb"));
 savedsl(verify, path_join(RUN, "verify.dslb"));
-final = torchdsl.run([path_join(RUN, "refine.dslb"), path_join(RUN, "verify.dslb")]);
+final = torchdsl.run(refine, [path_join(RUN, "refine.dslb"), path_join(RUN, "verify.dslb")]);
 trail = [];
 for (v in final.loss) { push(trail, sprintf("%.5f", v)); }
 println(f"3 refine: {LONG} steps, loss every 150 steps: {join(trail, ' ')}");

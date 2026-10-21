@@ -9,7 +9,7 @@ import "../cli.schema.dev.json" as lmtorch;
 RUN = ARGV.get(0, "artifacts/mlp-train-dsl");
 mkdir(RUN, true);
 
-train = _dsl_ schema="../schema/lmtorch.dsl.json";
+train = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
 let run = ${RUN};
 # tensor_rand seeds a fresh generator per call; manual_seed + rand draws the same values.
 torch.manual_seed(11);

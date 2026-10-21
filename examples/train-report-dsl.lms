@@ -36,7 +36,7 @@ TX_JSON = json_stringify(TEST_X);
 TY_JSON = json_stringify(TEST_Y);
 LR_MICRO = round(LR * 1000000);
 
-report = _dsl_ schema="../schema/lmtorch.dsl.json";
+report = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
 let run = ${RUN};
 let x = torch.tensor(${X_JSON}, DType.F32);
 let y = torch.tensor(${Y_JSON}, DType.F32);
