@@ -54,6 +54,11 @@ set +e; "$BIN" --dsl-schema --json > "$WORK/smoke.json" 2> "$WORK/smoke.err"; co
 if [ "$code" != 0 ] || [ ! -s "$WORK/smoke.json" ]; then
   echo "# $BIN --dsl-schema --json: exit $code, $(wc -c < "$WORK/smoke.json" | tr -d ' ') bytes; stderr: $(head -c 2000 "$WORK/smoke.err")" >&2
   if [ "$OS" = windows ] && command -v dumpbin >/dev/null 2>&1; then dumpbin -nologo -dependents "$BIN" >&2 || true; fi
+  # Windows: the stack at the fault, from the Debugging Tools' cdb with the PDB the release link writes next to the exe.
+  cdb="/c/Program Files (x86)/Windows Kits/10/Debuggers/x64/cdb.exe"
+  if [ "$OS" = windows ] && [ -x "$cdb" ]; then
+    "$cdb" -g -G -y "$(dirname "$BIN")" -c ".lines -d; .ecxr; kn 60; q" "$BIN" --dsl-schema --json 2>&1 | tail -90 >&2 || true
+  fi
   fail "$BIN does not start (exit $code)"
 fi
 scripts/sync-sdk.sh --verify >/dev/null || fail "third_party/dslvm/dslvm.hpp differs from sdk.lock"

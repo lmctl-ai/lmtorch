@@ -85,6 +85,8 @@ if(LMTORCH_LIBTORCH_PREFIX)
       target_link_options(lmtorch PRIVATE "/WHOLEARCHIVE:${lib}")
     endforeach()
     target_link_libraries(lmtorch PRIVATE ${LMTORCH_WHOLE} ${LMTORCH_ARCHIVES})
+    # A PDB next to the executable for crash stacks (not shipped); /OPT:REF,ICF keep the image as without /DEBUG.
+    target_link_options(lmtorch PRIVATE /DEBUG /OPT:REF /OPT:ICF)
   elseif(APPLE)
     # ld64 rescans archives as needed (no --start-group); -force_load is its --whole-archive. Only libc++ and libSystem
     # stay dynamic: they are part of macOS.
