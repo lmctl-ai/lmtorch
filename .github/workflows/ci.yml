@@ -193,6 +193,11 @@ jobs:
           pattern: lmtorch-*
           path: dist
           merge-multiple: true
+      - name: Tag matches lmtorch --version (lmscript @latest compares them)
+        run: |
+          chmod +x dist/lmtorch-linux-x64
+          got="$(dist/lmtorch-linux-x64 --version)"
+          test "$got" = "lmtorch ${GITHUB_REF_NAME#v}" || { echo "::error::tag $GITHUB_REF_NAME but binary says '$got' (bump project VERSION in CMakeLists.txt)"; exit 1; }
       - name: Create the release and attach the assets
         env:
           GH_TOKEN: ${{ github.token }}
