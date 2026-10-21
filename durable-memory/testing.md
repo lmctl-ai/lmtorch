@@ -1,13 +1,17 @@
 # Testing
 
-`./test.sh` is the native suite (about one minute on the dev build). In order:
+`./test.sh` is the native suite (about one minute on the dev build). It runs under bash on Linux, macOS and Windows
+(Git Bash: `.exe` binaries, drive-letter paths for anything a native program reads; see native-build.md). In order:
 
 1. `scripts/sync-sdk.sh --verify` (vendored `dslvm.hpp` equals `sdk.lock`), and the compiler emits bytecode v5.
 2. Schema gates: `--dsl-schema --json` equals `schema/lmtorch.dsl.json` byte for byte; `--dsl-signatures` equals
    `lmscript --dsl-signatures`; the `--dsl-schema` summary lists every member; lmapi `--schema` equals `cli.schema.dev.json`.
-3. Release form: the binary's NEEDED libraries must be glibc's own (libc, libm, libpthread, libdl, librt, ld-linux) or
-   none; the gate prints the glibc floor. `LMTORCH_REQUIRE_RELEASE=1` (CI release jobs) fails anything else; a dev
-   build only notes it.
+3. Release form: Linux: the binary's NEEDED libraries must be glibc's own (libc, libm, libpthread, libdl, librt, ld-linux)
+   or none, and the gate prints the glibc floor; macOS: `otool -L` lists only /usr/lib/libc++.1.dylib and
+   /usr/lib/libSystem.B.dylib, and the gate prints minos; Windows: `dumpbin -dependents` lists only Windows system DLLs
+   (no vcruntime/msvcp/ucrtbase/api-ms-win-crt). `LMTORCH_REQUIRE_RELEASE=1` (CI release jobs) fails anything else; a
+   dev build only notes it. Before all gates a smoke run reports a binary that cannot start with its exit status (and,
+   on Windows, the imported DLLs and a cdb stack).
 4. `lmtorch_unit` (C++ safetensors reader/writer, malformed headers, modes, BOOL payload bytes).
 5. `tests/dsl/api.lms`: one DSL program with an `out.check` per behavior (137 checks: creation, operators incl. reversed
    forms, broadcasting, reductions, shapes, losses, autograd accumulation, RNG reproducibility, every layer kind through

@@ -27,9 +27,10 @@ without docker, Python runtime, GUI or display code. Status of that goal: see st
 ## Per-OS release builds (2026-10-21)
 
 All five release forms come from the same two scripts and the same cmake option list; only the toolchain differs.
-CI runners, cold libtorch build at the given -j (CI run 39531212351): linux-arm64 (ubuntu-22.04-arm, -j4) 38 min,
-linux-x64 (ubuntu-22.04, -j4) 61 min, macos-arm64 (macos-15, -j3) 39 min, macos-x64 (macos-15-intel, -j4) 52 min,
-windows-x64 (windows-2022, -j4) 93 min (with mimalloc; run 39531212351). lmtorch itself builds in under a minute and test.sh runs in about one.
+CI runners, cold libtorch build at the given -j (runs 39531212351 / 39545682710): linux-arm64 (ubuntu-22.04-arm, -j4)
+38 / 40 min, linux-x64 (ubuntu-22.04, -j4) 61 / 64 min, macos-arm64 (macos-15, -j3) 39 / 37 min, macos-x64
+(macos-15-intel, -j4) 52 / 119 min (Intel runners vary a lot), windows-x64 (windows-2022, -j4) 93 / 94 min. Release
+executables: linux-x64 222 MB, linux-arm64 185 MB, macos-x64 224 MB, macos-arm64 174 MB unstripped; windows-x64 105 MB. lmtorch itself builds in under a minute and test.sh runs in about one.
 
 - **BLAS stays off everywhere** only with `-DCMAKE_DISABLE_FIND_PACKAGE_BLAS=ON`: PyTorch's Dependencies.cmake calls
   `find_package(BLAS)` (and then `find_package(LAPACK)`) even with `USE_BLAS=OFF`, which finds Accelerate on macOS and

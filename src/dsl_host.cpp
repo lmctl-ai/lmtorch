@@ -450,7 +450,7 @@ void register_torch(dslvm::Registry& r, Host& h) {
 
   // ---- Torch: process settings
   method(r, "Torch", "version", {}, "string", [](void*, Args&) {
-    return Value::string(std::string("lmtorch 0.3.0 (libtorch ") + std::to_string(TORCH_VERSION_MAJOR) + "." + std::to_string(TORCH_VERSION_MINOR) + "." + std::to_string(TORCH_VERSION_PATCH) + ", CPU)");
+    return Value::string(std::string("lmtorch 0.4.0 (libtorch ") + std::to_string(TORCH_VERSION_MAJOR) + "." + std::to_string(TORCH_VERSION_MINOR) + "." + std::to_string(TORCH_VERSION_PATCH) + ", CPU)");
   });
   method(r, "Torch", "manual_seed", {"int"}, "void", [](void*, Args& a) {
     if (a[0].i < 0) fail("seed must be nonnegative");

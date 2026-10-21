@@ -6,7 +6,7 @@ import "./lib/torchdsl.lms";
 RUN = ARGV.get(0, "artifacts/tensor-chain-dsl");
 mkdir(RUN, true);
 
-chain = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
+chain = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
 let run = ${RUN};
 let a = torch.ones(2, 2);
 let b = a.matmul(a);

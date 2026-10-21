@@ -8,7 +8,7 @@ Two ways to drive the same `lmtorch` binary from lmscript:
   `lmtorch --dsl FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
   memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).
 
-Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0"` (lmscript >= 0.2.359): no schema file and
+Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0"` (lmscript >= 0.2.359): no schema file and
 no manual install.
 
 - `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --dsl-schema --json`) and compiles against exactly

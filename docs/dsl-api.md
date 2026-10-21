@@ -2,7 +2,7 @@
 
 `schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5). `lmtorch --dsl-schema` prints this list grouped by
 type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs, so a block can name the binary
-instead of a schema file: `prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";` (lmscript >= 0.2.359)
+instead of a schema file: `prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";` (lmscript >= 0.2.359)
 compiles against the binary's own schema, which can never drift from the binary that runs it. `install=` downloads that
 release (verified against GitHub's SHA-256 digest) when lmtorch is not on PATH, and `dsl_cli(prog)` is the argv prefix of
 the binary the block was compiled against. `lmtorch --cli-schema` prints the
@@ -12,7 +12,7 @@ the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatur
 A program is an lmscript `_dsl_` block compiled to bytecode and run by the native host:
 
 ```lmscript
-prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
+prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
 let x = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]").requires_grad(true);
 let loss = (x.matmul(x) + 1.0).square().mean();
 loss.backward();
@@ -60,7 +60,7 @@ int (`float(${round(lr * 1000000)}) / 1000000.0`).
 | `sgd(Model, lr[, momentum])`, `sgd(TensorList, lr)` | Optimizer | `torch.optim.SGD` |
 | `adam(Model, lr)`, `adam(TensorList, lr)`, `adamw(Model, lr, weight_decay)` | Optimizer | `torch.optim.Adam` / `AdamW` defaults otherwise |
 | `mark()`, `release(mark)`, `live_tensors()` | int | handle lifetime, see below |
-| `version()` | string | `lmtorch 0.3.0 (libtorch 2.9.1, CPU)` |
+| `version()` | string | `lmtorch 0.4.0 (libtorch 2.9.1, CPU)` |
 
 ## Tensor
 

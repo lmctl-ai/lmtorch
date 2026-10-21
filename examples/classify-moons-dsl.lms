@@ -13,7 +13,7 @@ SEED = num(ARGV.get(1, "7"));
 TARGET = 0.95;
 mkdir(RUN, true);
 
-prepare = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
+prepare = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
 let run = ${RUN};
 torch.manual_seed(${SEED});
 let n = 200;
@@ -49,7 +49,7 @@ attempt = 0;
 best = null;
 while (attempt < 3) {
   attempt = attempt + 1;
-  train = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
+  train = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
   let run = ${RUN};
   let data = torch.open(run + "/data.safetensors");
   let x = data.get("x_train");
@@ -83,7 +83,7 @@ while (attempt < 3) {
   out.set("parameters", model.num_parameters()).set("architecture", model.summary());
 end _dsl_
 
-  evaluate = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
+  evaluate = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
   let run = ${RUN};
   let model = torch.load_model(run + "/model.safetensors").eval();
   torch.grad_enabled(false);
@@ -123,7 +123,7 @@ for (r = 0; r < ROWS; r = r + 1) {
   }
 }
 GRID_JSON = json_stringify(GRID);
-predict = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.3.0";
+predict = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@v0.4.0";
 let run = ${RUN};
 let model = torch.load_model(run + "/model.safetensors").eval();
 torch.grad_enabled(false);
