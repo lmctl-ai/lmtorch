@@ -171,6 +171,8 @@ run_example checkpoint-resume-dsl "checkpoints bit-identical: true"
 run_example cnn-bars-dsl "2 classify picture 4: vertical"
 run_example regression-csv-dsl "coefficients within 0.25 of the generating formula"
 run_example install-and-run-dsl "Install-and-run passed."
+run_example tensor-sum-dsl "shape [2, 2], sum 10"
+run_example autograd-gradient-dsl 'loss 14, gradient [2,-4,6]'
 # The lmapi recipes run against the same native binary (no docker shim).
 run_example tensor-chain "[0.5,0.5,0.5,0.5]" "artifacts/recipe-chain"
 run_example grad-check "dx: [2,-4,6] loss: 14" "artifacts/recipe-grad"

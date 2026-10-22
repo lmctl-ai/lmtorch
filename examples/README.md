@@ -51,3 +51,8 @@ lmscript examples/classify-moons-dsl.lms
 | [regression-csv-dsl.lms](regression-csv-dsl.lms) | lmscript writes a CSV → DSL reads, standardizes, fits weights with Adam on hand-made parameters, writes predictions CSV → lmscript parses it and checks the recovered formula |
 
 Every example needs only lmtorch and lmscript. `../test.sh` runs every example and checks its output.
+
+The compact examples used in the generated book are:
+
+- `tensor-sum-dsl.lms` Creates a two-by-two tensor and checks its scalar sum.
+- `autograd-gradient-dsl.lms` Backpropagates through a sum of squares and checks the gradient.
