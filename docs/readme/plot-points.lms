@@ -1,0 +1,13 @@
+p = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+let run = "artifacts/classify-moons";
+let data = torch.open(run + "/data.safetensors");
+let points = torch.cat(torch.list().add(data.get("x_train")).add(data.get("x_test")), 0);
+let labels = torch.cat(torch.list().add(data.get("y_train")).add(data.get("y_test")), 0);
+points = points * data.get("std") + data.get("mean");
+out.set("points", points).set("labels", labels);
+end _dsl_
+
+savedsl(p, "plot-points.dslb");
+r = system ${dsl_cli(p)} --dsl plot-points.dslb;
+if (r.code != 0) { println(str(r.stderr)); exit(r.code); }
+println(json_stringify(json_parse(r.stdout).result));
