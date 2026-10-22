@@ -1,10 +1,22 @@
+COLS = 81; ROWS = 51;
+GRID = [];
+for (r = 0; r < ROWS; r = r + 1) {
+  for (c = 0; c < COLS; c = c + 1) {
+    push(GRID, [-1.7 + 4.4 * c / (COLS - 1), 1.8 - 3.15 * r / (ROWS - 1)]);
+  }
+}
+GRID_JSON = json_stringify(GRID);
 p = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = "artifacts/classify-moons";
 let data = torch.open(run + "/data.safetensors");
 let points = torch.cat(torch.list().add(data.get("x_train")).add(data.get("x_test")), 0);
 let labels = torch.cat(torch.list().add(data.get("y_train")).add(data.get("y_test")), 0);
 points = points * data.get("std") + data.get("mean");
-out.set("points", points).set("labels", labels);
+let model = torch.load_model(run + "/model.safetensors").eval();
+torch.grad_enabled(false);
+let query = (torch.tensor(${GRID_JSON}, DType.F32) - data.get("mean")).div(data.get("std"));
+let boundary = model.forward(query).argmax(1);
+out.set("points", points).set("labels", labels).set("boundary", boundary);
 end _dsl_
 
 savedsl(p, "plot-points.dslb");

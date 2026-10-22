@@ -37,6 +37,11 @@ if accuracy < 0.95:
 
 point_data = json.loads((work / "points.json").read_text(encoding="utf-8"))
 points, labels = point_data["points"], point_data["labels"]
+cols, rows = 81, 51
+boundary_labels = [int(value) for value in point_data["boundary"]]
+if len(boundary_labels) != cols * rows:
+    raise SystemExit("classifier did not return the dense 81 x 51 boundary grid")
+grid = [boundary_labels[r*cols:(r+1)*cols] for r in range(rows)]
 if len(points) != 400 or len(labels) != 400:
     raise SystemExit("expected the classifier's 400 generated points")
 losses = []
@@ -62,16 +67,17 @@ def paths(frame, radius):
         py = top + (ymax - y) / (ymax - ymin) * height
         class_paths[int(label)].append(circle(px, py, radius))
 
-    # Marching-square segments come directly from adjacent class predictions in the tool's 41 x 13 grid.
+    # Marching-square segments come directly from adjacent class predictions in the dense model grid.
     boundary = []
-    x0, x1, y0, y1 = -1.5, 2.5, -1.0, 1.5
     def xy(col, row):
-        return (left + (x0 + (x1-x0) * col / 40 - xmin) / (xmax-xmin) * width,
-                top + (ymax - (y1 - (y1-y0) * row / 12)) / (ymax-ymin) * height)
-    for row in range(12):
-        for col in range(40):
-            v = [grid[row][col] == "x", grid[row][col+1] == "x",
-                 grid[row+1][col+1] == "x", grid[row+1][col] == "x"]
+        x = -1.7 + 4.4 * col / (cols-1)
+        y = 1.8 - 3.15 * row / (rows-1)
+        return (left + (x - xmin) / (xmax-xmin) * width,
+                top + (ymax - y) / (ymax-ymin) * height)
+    for row in range(rows-1):
+        for col in range(cols-1):
+            v = [grid[row][col] == 1, grid[row][col+1] == 1,
+                 grid[row+1][col+1] == 1, grid[row+1][col] == 1]
             edge_points = []
             edges = [(0,1,(col+.5,row)), (1,2,(col+1,row+.5)),
                      (2,3,(col+.5,row+1)), (3,0,(col,row+.5))]
@@ -81,13 +87,33 @@ def paths(frame, radius):
             if len(edge_points) == 4:
                 pairs = [(edge_points[0], edge_points[1]), (edge_points[2], edge_points[3])]
             for a,b in pairs:
+                mid_col, mid_row = (a[0]+b[0])/2, (a[1]+b[1])/2
+                world_x = -1.7 + 4.4 * mid_col / (cols-1)
+                world_y = 1.8 - 3.15 * mid_row / (rows-1)
+                # Keep the illustrative contour where the two generated classes have support;
+                # omit low-confidence extrapolation that shoots beyond the point clouds.
+                if not (-1.3 <= world_x <= 2.15 and -0.65 <= world_y <= 1.45):
+                    continue
+                if min((px-world_x)**2 + (py-world_y)**2 for px,py in points) > 0.45**2:
+                    continue
                 ax, ay = xy(*a); bx, by = xy(*b)
                 boundary.append(f"M {ax:.1f} {ay:.1f} L {bx:.1f} {by:.1f}")
     def chunks(items):
         return [" ".join(items[i:i+50]) for i in range(0, len(items), 50)]
     if len(class_paths[0]) != 200 or len(class_paths[1]) != 200:
         raise SystemExit("expected 200 points in each class")
-    return {"class0": chunks(class_paths[0]), "class1": chunks(class_paths[1]), "boundary": " ".join(boundary)}
+    boundary_chunks = []
+    current = ""
+    for segment in boundary:
+        if current and len(current) + len(segment) + 1 > 7000:
+            boundary_chunks.append(current)
+            current = ""
+        current += (" " if current else "") + segment
+    if current: boundary_chunks.append(current)
+    if len(boundary_chunks) > 8:
+        raise SystemExit("decision boundary path needs more than eight safe path segments")
+    boundary_chunks += ["M 2000 2000 L 2001 2001"] * (8-len(boundary_chunks))
+    return {"class0": chunks(class_paths[0]), "class1": chunks(class_paths[1]), "boundary": boundary_chunks}
 
 def write_plot(name, frame, radius):
     Path(f"build/readme/plot-{name}.json").write_text(json.dumps(paths(frame, radius)), encoding="utf-8")
