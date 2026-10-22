@@ -1,0 +1,57 @@
+sum = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+let values = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]");
+let total = values.sum().item();
+out.check(total == 10.0, "sum must be 10");
+out.set("total", total);
+end _dsl_
+
+gradient = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+let x = torch.tensor("[1.0, -2.0, 3.0]").requires_grad(true);
+let loss = x.square().sum();
+loss.backward();
+let grad = x.grad();
+out.check(grad.allclose(x.detach() * 2.0, 0.0, 0.0), "gradient must equal 2x");
+out.set("loss", loss.item()).set("gradient", grad);
+end _dsl_
+
+sum_file = "build/readme/tensor-sum.dslb";
+savedsl(sum, sum_file);
+sum_run = system ${dsl_cli(sum)} --dsl ${sum_file};
+if (sum_run.code != 0) { println(str(sum_run.stderr)); exit(sum_run.code); }
+sum_result = json_parse(sum_run.stdout).result;
+if (sum_result.total != 10.0) { println("unexpected tensor sum"); exit(1); }
+
+gradient_file = "build/readme/autograd-gradient.dslb";
+savedsl(gradient, gradient_file);
+gradient_run = system ${dsl_cli(gradient)} --dsl ${gradient_file};
+if (gradient_run.code != 0) { println(str(gradient_run.stderr)); exit(gradient_run.code); }
+gradient_result = json_parse(gradient_run.stdout).result;
+if (json_stringify(gradient_result.gradient) != "[2,-4,6]") { println("unexpected gradient"); exit(1); }
+G0 = gradient_result.gradient[0]; G1 = gradient_result.gradient[1]; G2 = gradient_result.gradient[2];
+B0 = num(G0) * 14.0; B1 = num(G1) * -14.0; B2 = num(G2) * 14.0;
+Y0 = 254.0 - B0; Y2 = 254.0 - B2;
+
+draw = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+scene.canvas(1200, 440, "#101923");
+scene.text(56.0, 56.0, 16.0, "REAL OUTPUTS  /  LMTORCH EXAMPLES", "#79d4c3").set_attr("font-weight", "700");
+scene.rect(56.0, 88.0, 510.0, 286.0, "#182635");
+scene.rect(590.0, 88.0, 554.0, 286.0, "#182635");
+scene.text(88.0, 138.0, 24.0, "Tensor reduction", "#f2f6fb").set_attr("font-weight", "700");
+scene.text(88.0, 184.0, 18.0, "1 + 2 + 3 + 4 = sum", "#b4c2d0");
+scene.text(88.0, 286.0, 72.0, "10", "#f5c16c").set_attr("font-weight", "700");
+scene.text(590.0 + 32.0, 138.0, 24.0, "Autograd  /  d(sum(x²)) / dx", "#f2f6fb").set_attr("font-weight", "700");
+scene.line(658.0, 254.0, 1090.0, 254.0, "#526274", 1.5);
+scene.rect(712.0, float(${Y0}), 76.0, float(${B0}), "#79d4c3");
+scene.rect(858.0, 254.0, 76.0, float(${B1}), "#f5c16c");
+scene.rect(1004.0, float(${Y2}), 76.0, float(${B2}), "#79d4c3");
+scene.text(734.0, 338.0, 18.0, "2", "#b4c2d0").set_attr("text-anchor", "middle");
+scene.text(880.0, 338.0, 18.0, "-4", "#b4c2d0").set_attr("text-anchor", "middle");
+scene.text(1026.0, 338.0, 18.0, "6", "#b4c2d0").set_attr("text-anchor", "middle");
+scene.text(88.0, 420.0, 14.0, "Both results are checked against expected values before this image is drawn.", "#b4c2d0");
+scene.render_png("build/rendered/readme-gallery.png", 1200, 440, 1);
+end _dsl_
+gallery_file = "build/readme/gallery.dslb";
+savedsl(draw, gallery_file);
+gallery_run = system ${dsl_cli(draw)} --dsl ${gallery_file};
+if (gallery_run.code != 0) { println(str(gallery_run.stderr)); exit(gallery_run.code); }
+println("tensor sum 10; gradient [2, -4, 6]");

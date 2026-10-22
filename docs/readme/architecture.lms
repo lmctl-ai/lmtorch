@@ -1,0 +1,36 @@
+out = ARGV.len() > 0 ? ARGV[0] : "build/readme-architecture.dslb";
+theme = ARGV.get(1, "dark");
+PNG_PATH = "build/rendered/readme-architecture-" + theme + ".png";
+dark = theme == "dark";
+bg = dark ? "#111c28" : "#f4f7fb";
+panel = dark ? "#203447" : "#ffffff";
+ink = dark ? "#f2f6f7" : "#172434";
+muted = dark ? "#aabcca" : "#526274";
+accent = dark ? "#f5c16c" : "#ad6500";
+p = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+scene.canvas(1200, 360, ${bg});
+scene.text(58.0, 66.0, 25.0, "From LMScript to a native tensor result", ${ink}).set_attr("font-weight", "700");
+scene.rect(58.0, 124.0, 244.0, 148.0, ${panel});
+scene.rect(350.0, 124.0, 244.0, 148.0, ${panel});
+scene.rect(642.0, 124.0, 244.0, 148.0, ${panel});
+scene.rect(934.0, 124.0, 208.0, 148.0, ${panel});
+scene.text(180.0, 178.0, 22.0, "LMScript", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+scene.text(180.0, 221.0, 14.0, "tensor program", ${muted}).set_attr("text-anchor", "middle");
+scene.text(472.0, 178.0, 22.0, "DSL schema", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+scene.text(472.0, 221.0, 14.0, "typed operations", ${muted}).set_attr("text-anchor", "middle");
+scene.text(764.0, 178.0, 22.0, "lmtorch", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+scene.text(764.0, 221.0, 14.0, "C++ + CPU libtorch", ${muted}).set_attr("text-anchor", "middle");
+scene.text(1038.0, 178.0, 20.0, "Result", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+scene.text(1038.0, 221.0, 14.0, "values + artifacts", ${muted}).set_attr("text-anchor", "middle");
+let a = scene.line(310.0, 198.0, 344.0, 198.0, ${accent}, 2.5);
+a.set_attr("marker-end", "arrow");
+let b = scene.line(602.0, 198.0, 636.0, 198.0, ${accent}, 2.5);
+b.set_attr("marker-end", "arrow");
+let c = scene.line(894.0, 198.0, 928.0, 198.0, ${accent}, 2.5);
+c.set_attr("marker-end", "arrow");
+scene.text(58.0, 320.0, 14.0, "Models, autograd, and tensor operations run in the same native host.", ${muted});
+scene.render_png(${PNG_PATH}, 1200, 360, 1);
+end _dsl_
+savedsl(p, out);
+run = system ${dsl_cli(p)} --dsl ${out};
+if (run.code != 0) { println(str(run.stderr)); exit(run.code); }
