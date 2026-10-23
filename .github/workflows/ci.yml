@@ -198,6 +198,10 @@ jobs:
           chmod +x dist/lmtorch-linux-x64
           got="$(dist/lmtorch-linux-x64 --version)"
           test "$got" = "lmtorch ${GITHUB_REF_NAME#v}" || { echo "::error::tag $GITHUB_REF_NAME but binary says '$got' (bump project VERSION in CMakeLists.txt)"; exit 1; }
+      - name: Generate release checksums
+        run: |
+          cd dist
+          find . -maxdepth 1 -type f -name 'lmtorch-*' ! -name '*.sha256' -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
       - name: Create the release and attach the assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -207,7 +211,7 @@ jobs:
           test -f dist/lmtorch-windows-x64.exe -a -f dist/lmtorch-windows-x64.zip -a -f dist/lmtorch-windows-x64.sha256
           # Idempotent: re-running a tag's workflow replaces the assets.
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber dist/SHA256SUMS
           else
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes dist/SHA256SUMS
           fi
