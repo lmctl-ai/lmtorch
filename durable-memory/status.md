@@ -8,8 +8,8 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 
 ## State
 - One C++17 binary, two front ends. lmapi: the original 12 operations (lmcpp, `--schema` byte-identical to
-  `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --dsl prog.dslb` runs lmscript `_dsl_` bytecode (v5,
-  cpp-dsl-sdk VM pinned in `sdk.lock`) against `schema/lmtorch.dsl.json`: 218 signatures (`docs/dsl-api.md`, decisions in
+  `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --dsl prog.dslb` runs lmscript `_lmcode_` bytecode (v5,
+  lmcode-cpp VM pinned in `sdk.lock`) against `schema/lmtorch.dsl.json`: 288 signatures (216 lmtorch + 72 lmcode std) (`docs/dsl-api.md`, decisions in
   dsl-host.md).
 - Build: `scripts/build-libtorch.sh` (static CPU-only libtorch 2.9.1 from source) then `scripts/build-native.sh`, on
   Linux (GCC), macOS (AppleClang) and Windows (MSVC from Git Bash). Release form: libtorch and the C++ runtime static,
@@ -45,18 +45,22 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   uninitialized memory, uncaught lmcpp::Error aborting the process, BOOL payload bytes, grad mode leaking across files,
   CSV byte-order marks, and several error messages).
 
-- `_dsl_ cli="lmtorch"` (lmscript R42, lmctl-mono 0795e69f, 2026-10-20): the compiler takes the schema from
+- `_lmcode_ cli="lmtorch"` (lmscript R42, lmctl-mono 0795e69f, 2026-10-20): the compiler takes the schema from
   `lmtorch --dsl-schema --json`; lmtorch adds `--cli-schema`. lmscript 0.2.359 (npm) ships R42 + R43.
-- Examples (2026-10-20): every `_dsl_` block is `cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (R45, owner 2026-10-21); the helpers
+- Examples (2026-10-20): every `_lmcode_` block is `cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (R45, owner 2026-10-21); the helpers
   run `system ${dsl_cli(prog)} --dsl ...` (lib/torchdsl.lms: `run(prog, files)`, `run_block(prog, path)`; LMTORCH_BIN no
   longer selects the binary for examples, PATH does). New install-and-run-dsl.lms is the minimal form. test.sh puts the
   binary under test first on PATH, gives lmscript a private LMSCRIPT_TOOL_CACHE and fails if any example downloaded.
   lmapi recipes (and mlp-train-dsl's cross-check) import `github:lmctl-ai/lmtorch@latest lmtorch` (lmscript R44,
   >= 0.2.366): schema from `lmtorch --cli-schema --json`, calls run that binary; the test.sh no-download guard runs
-  after them. `@latest` needs `lmtorch --version` (added in 0.4.1, released 2026-10-21; verified from an empty cache: @latest installed v0.4.1, both the _dsl_ and the import examples ran, --check then worked offline). No tag bumps are needed in the examples or docs at a release.
+  after them. `@latest` needs `lmtorch --version` (added in 0.4.1, released 2026-10-21; verified from an empty cache: @latest installed v0.4.1, both the _lmcode_ and the import examples ran, --check then worked offline). No tag bumps are needed in the examples or docs at a release.
 
 - Sibling hosts (2026-10-21): lmcad v0.1.3 and lmhtml v0.7.3 add `--version` (same CMake-VERSION source and release-job
   tag guard), so `install="github:lmctl-ai/{lmcad,lmhtml}@latest"` works; verified from an empty cache on linux-arm64.
+
+- lmcode (2026-10-24, v0.5.0): SDK is lmctl-ai/lmcode-cpp (renamed from cpp-dsl-sdk) at 53b9bdf; its registry
+  installs the 72-signature lmcode std, lmtorch's own StrList is gone (Bundle.keys() returns the std one), the schema is
+  generated from schema/lmtorch.host.json + std, and every block is spelled `_lmcode_` (lmscript >= 0.2.419).
 
 ## Pending
 - No BLAS (portable GEMM; no linalg) on any OS. Release binaries are not code-signed or notarized.

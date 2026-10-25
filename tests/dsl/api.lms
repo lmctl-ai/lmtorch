@@ -2,7 +2,7 @@
 # Usage: lmscript tests/dsl/api.lms OUT.dslb [work_dir]   then   lmtorch --dsl OUT.dslb   (cwd must contain work_dir)
 OUT = ARGV.get(0, "build/api.dslb");
 WORK = ARGV.get(1, "dsl-api-work");
-api = _dsl_ schema="../../schema/lmtorch.dsl.json";
+api = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let work = ${WORK};
 fn near(a: float, b: float) -> bool { return abs(a - b) < 0.000001; }
 fn same(a: Tensor, b: string) -> bool { return a.to_json() == b; }
@@ -243,5 +243,5 @@ let bools = torch.tensor("[true, false, true]");
 bools.save(work + "/bools.safetensors");
 out.check(torch.load(work + "/bools.safetensors").equal(bools) && bools.to(DType.F32).sum().item() == 2.0, "BOOL save/load and conversion");
 out.check(torch.randperm(0).numel() == 0 && torch.linspace(0.0, 1.0, 0).numel() == 0, "empty random/linspace");
-end _dsl_
+end _lmcode_
 savedsl(api, OUT);

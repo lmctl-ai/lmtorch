@@ -13,7 +13,7 @@ SEED = num(ARGV.get(1, "7"));
 TARGET = 0.95;
 mkdir(RUN, true);
 
-prepare = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+prepare = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.manual_seed(${SEED});
 let n = 200;
@@ -38,7 +38,7 @@ torch.bundle()
   .put("mean", mean).put("std", std).meta("seed", str(${SEED}))
   .save(run + "/data.safetensors");
 out.set("train", ntrain).set("test", 2 * n - ntrain).set("class_balance", y.to(DType.F32).mean().item());
-end _dsl_
+end _lmcode_
 
 data = torchdsl.run_block(prepare, path_join(RUN, "prepare.dslb"));
 if (data == null) { exit(0); }
@@ -49,7 +49,7 @@ attempt = 0;
 best = null;
 while (attempt < 3) {
   attempt = attempt + 1;
-  train = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+  train = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
   let run = ${RUN};
   let data = torch.open(run + "/data.safetensors");
   let x = data.get("x_train");
@@ -81,9 +81,9 @@ while (attempt < 3) {
   torch.grad_enabled(false);
   out.set("train_accuracy", model.forward(x).argmax(1).eq(y).to(DType.F32).mean().item());
   out.set("parameters", model.num_parameters()).set("architecture", model.summary());
-end _dsl_
+end _lmcode_
 
-  evaluate = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+  evaluate = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
   let run = ${RUN};
   let model = torch.load_model(run + "/model.safetensors").eval();
   torch.grad_enabled(false);
@@ -95,7 +95,7 @@ end _dsl_
   out.set("test_accuracy", pred.eq(y).to(DType.F32).mean().item());
   out.set("true_pos", (truth1 * pred1).sum().item()).set("false_neg", (truth1 * (1.0 - pred1)).sum().item());
   out.set("false_pos", ((1.0 - truth1) * pred1).sum().item()).set("true_neg", ((1.0 - truth1) * (1.0 - pred1)).sum().item());
-end _dsl_
+end _lmcode_
 
   savedsl(train, path_join(RUN, "train.dslb"));
   savedsl(evaluate, path_join(RUN, "evaluate.dslb"));
@@ -123,14 +123,14 @@ for (r = 0; r < ROWS; r = r + 1) {
   }
 }
 GRID_JSON = json_stringify(GRID);
-predict = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+predict = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let model = torch.load_model(run + "/model.safetensors").eval();
 torch.grad_enabled(false);
 let data = torch.open(run + "/data.safetensors");
 let points = (torch.tensor(${GRID_JSON}, DType.F32) - data.get("mean")).div(data.get("std"));
 out.set("classes", model.forward(points).argmax(1));
-end _dsl_
+end _lmcode_
 grid = torchdsl.run_block(predict, path_join(RUN, "predict.dslb"));
 println("4 predict: decision regions (o = upper moon, x = lower moon)");
 map = "";

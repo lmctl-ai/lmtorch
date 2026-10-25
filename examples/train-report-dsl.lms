@@ -1,4 +1,4 @@
-# _dsl_ version of train-report.lms: lmscript builds the 16-point dataset, ONE DSL program trains the seeded 2-8-1 MLP,
+# _lmcode_ version of train-report.lms: lmscript builds the 16-point dataset, ONE DSL program trains the seeded 2-8-1 MLP,
 # scores training and held-out points and computes the metrics with tensor ops, and lmscript writes a Markdown report
 # with a loss table and a text sparkline. The original lmapi recipe made 72 tool calls plus 5 calls to a chart/DOCX tool;
 # this one needs only lmtorch (no Python, no GUI or rendering code).
@@ -36,7 +36,7 @@ TX_JSON = json_stringify(TEST_X);
 TY_JSON = json_stringify(TEST_Y);
 LR_MICRO = round(LR * 1000000);
 
-report = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+report = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let x = torch.tensor(${X_JSON}, DType.F32);
 let y = torch.tensor(${Y_JSON}, DType.F32);
@@ -83,7 +83,7 @@ out.set("engine", torch.version()).set("losses", losses).set("first_loss", losse
   .set("min_loss", losses.min().item()).set("train_mse", sse / float(y.numel()))
   .set("max_abs_error", err.abs().max().item()).set("r2", 1.0 - sse / sst)
   .set("heldout_pred", held.flatten()).set("heldout_mse", held.mse_loss(ty).item());
-end _dsl_
+end _lmcode_
 
 res = torchdsl.run_block(report, path_join(RUN, "train-report.dslb"));
 if (res == null) { exit(0); }

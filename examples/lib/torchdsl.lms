@@ -1,5 +1,5 @@
 package torchdsl;
-# Shared plumbing for the _dsl_ examples. Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@TAG"`:
+# Shared plumbing for the _lmcode_ examples. Every block is `_lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@TAG"`:
 # lmscript takes the schema from `lmtorch --dsl-schema --json` (lmtorch on PATH, else that release, downloaded once into
 # lmscript's tool cache and checked against GitHub's SHA-256 digest), compiles the block into bytecode (savedsl), and
 # dsl_cli(prog) is the argv prefix of that exact binary. This file wraps the second step: running the bytecode.

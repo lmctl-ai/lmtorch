@@ -9,7 +9,7 @@ RUN = ARGV.get(0, "artifacts/checkpoint-resume-dsl");
 mkdir(RUN, true);
 
 
-straight = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+straight = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.manual_seed(5);
 let x = torch.randn(64, 3);
@@ -27,9 +27,9 @@ for (step in range(0, 40)) {
   out.append("a_loss", loss.item());
 }
 model.save(run + "/a-40.safetensors");
-end _dsl_
+end _lmcode_
 
-first_half = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+first_half = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let data = torch.open(run + "/data.safetensors");
 let model = torch.load_model(run + "/init.safetensors");
@@ -42,9 +42,9 @@ for (step in range(0, 20)) {
   out.append("b_loss", loss.item());
 }
 model.save(run + "/b-20.safetensors");
-end _dsl_
+end _lmcode_
 
-second_half = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+second_half = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let data = torch.open(run + "/data.safetensors");
 let model = torch.load_model(run + "/b-20.safetensors");
@@ -57,9 +57,9 @@ for (step in range(0, 20)) {
   out.append("b_loss", loss.item());
 }
 model.save(run + "/b-40.safetensors");
-end _dsl_
+end _lmcode_
 
-compare = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+compare = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let a = torch.open(run + "/a-40.safetensors");
 let b = torch.open(run + "/b-40.safetensors");
@@ -70,7 +70,7 @@ for (k in keys) {
 }
 out.set("identical", same);
 out.check(same, "resumed training diverged from uninterrupted training");
-end _dsl_
+end _lmcode_
 
 paths = [];
 names = ["straight", "first-half", "second-half", "compare"];

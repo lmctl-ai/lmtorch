@@ -9,7 +9,7 @@
 #include <io.h>
 #endif
 // Host flag standard (R42 in lmscript's dsl-bytecode requirements): --cli-schema prints the lmapi cli.schema.v1 document
-// (also reachable as the lmapi protocol's --schema), --dsl-schema prints the _dsl_ schema, --version prints
+// (also reachable as the lmapi protocol's --schema), --dsl-schema prints the _lmcode_ schema, --version prints
 // `lmtorch MAJOR.MINOR.PATCH` (lmscript's install=...@latest compares it with the release tag).
 int main(int argc,char**argv){
 #ifdef _WIN32

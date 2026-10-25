@@ -1,19 +1,19 @@
 mode = ARGV.get(0, "sum");
 theme = ARGV.get(1, "dark");
 dark = theme == "dark";
-sum_prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+sum_prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let values = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]");
 let total = values.sum().item();
 out.check(total == 10.0, "tensor sum must be 10");
 out.set("total", total);
-end _dsl_
-grad_prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+end _lmcode_
+grad_prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let x = torch.tensor("[1.0, -2.0, 3.0]").requires_grad(true);
 let loss = x.square().sum(); loss.backward();
 let grad = x.grad();
 out.check(grad.allclose(x.detach() * 2.0, 0.0, 0.0), "gradient must equal 2x");
 out.set("gradient", grad);
-end _dsl_
+end _lmcode_
 savedsl(sum_prog, "build/readme/sum.dslb");
 sum_run = system ${dsl_cli(sum_prog)} --dsl build/readme/sum.dslb;
 if (sum_run.code != 0) { println(str(sum_run.stderr)); exit(sum_run.code); }
@@ -42,7 +42,7 @@ muted = dark ? "#b4c2d0" : "#526274";
 blue = dark ? "#79d4c3" : "#087f72";
 orange = dark ? "#f5c16c" : "#ad6500";
 edge = dark ? "#dce4ed" : "#26384c";
-p = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+p = _lmcode_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
 scene.canvas(1000, 420, ${bg});
 scene.rect(32.0, 30.0, 936.0, 360.0, ${panel});
 if (${mode} == "sum") {
@@ -76,7 +76,7 @@ if (${mode} == "sum") {
   scene.path(${P1C}, ${orange}, "none", 1.0); scene.path(${P1D}, ${orange}, "none", 1.0);
 }
 scene.render_png(${PNG}, 1000, 420, 1);
-end _dsl_
+end _lmcode_
 host = "build/readme-gallery-" + mode + "-" + theme + ".dslb";
 savedsl(p, host);
 r = system ${dsl_cli(p)} --dsl ${host};

@@ -3,7 +3,9 @@
 `./test.sh` is the native suite (about one minute on the dev build). It runs under bash on Linux, macOS and Windows
 (Git Bash: `.exe` binaries, drive-letter paths for anything a native program reads; see native-build.md). In order:
 
-1. `scripts/sync-sdk.sh --verify` (vendored `dslvm.hpp` equals `sdk.lock`), and the compiler emits bytecode v5.
+1. `scripts/sync-sdk.sh --verify` (every vendored lmcode-cpp file equals `sdk.lock`); `schema/lmtorch.dsl.json` equals
+   `schema/lmtorch.host.json` merged with the std schema (and strips back to it); the compiler emits bytecode v5; a std
+   block (strings, math, lists, files, `Bundle.keys().join`) runs.
 2. Schema gates: `--dsl-schema --json` equals `schema/lmtorch.dsl.json` byte for byte; `--dsl-signatures` equals
    `lmscript --dsl-signatures`; the `--dsl-schema` summary lists every member; lmapi `--schema` equals `cli.schema.dev.json`.
 3. Release form: Linux: the binary's NEEDED libraries must be glibc's own (libc, libm, libpthread, libdl, librt, ld-linux)
@@ -23,8 +25,8 @@
    before the first runs), usage errors (exit 2, no result line), and run/app failures asserting exit, phase, code, a message
    fragment and the reported DSL line (60 cases, incl. ragged literals, corrupt BOOL bytes written with printf, unknown
    saved layers, unexpected tensors in Model.load, double backward, non-contiguous set, and a two-file run proving grad
-   mode resets per file while the RNG continues). Expected lines are the line before each case's `end _dsl_`; when
-   inserting a case, recompute them (a small Python pass did this: find the preceding `end _dsl_`, use its line number - 1),
+   mode resets per file while the RNG continues). Expected lines are the line before each case's `end _lmcode_`; when
+   inserting a case, recompute them (a small Python pass did this: find the preceding `end _lmcode_`, use its line number - 1),
    because the faulting statement is always that last body line.
 6b. test.sh also pins the front-end boundary: a BOOL artifact written by the DSL is an lmapi INVALID_DTYPE refusal (exit 2).
 7. An ill-typed chunk is a located lmscript compile error (exit 2).

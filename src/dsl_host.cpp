@@ -1,5 +1,6 @@
-// The `_dsl_` bytecode host: binds schema/lmtorch.dsl.json (embedded byte for byte) to libtorch through the vendored
-// cpp-dsl-sdk VM. One process runs one or more chunks against one Torch/Out context; stdout carries exactly one JSON line.
+// The `_lmcode_` bytecode host: binds schema/lmtorch.dsl.json (embedded byte for byte: schema/lmtorch.host.json merged with
+// the lmcode std schema) to libtorch through the vendored lmcode-cpp VM, whose default Registry installs the std catalog.
+// One process runs one or more chunks against one Torch/Out context; stdout carries exactly one JSON line.
 #include "lmtorch/dsl_host.hpp"
 #include "lmtorch/safetensors.hpp"
 #include "dslvm.hpp"
@@ -44,7 +45,6 @@ struct Out { OJson result = OJson::object(); };
 struct Host {
   std::deque<TensorBox> tensors;
   std::deque<std::vector<torch::Tensor>> lists;
-  std::deque<std::vector<std::string>> strlists;
   std::deque<BundleBox> bundles;
   std::deque<ModelBox> models;
   std::deque<OptBox> optimizers;
@@ -787,19 +787,13 @@ void register_torch(dslvm::Registry& r, Host& h) {
   method(r, "Tensor", "save", {"string"}, "Tensor", [](void* p, Args& a) { save_bundle(a[0].s, {{"tensor", tensor_of(p)}}, {}); return Value::object("Tensor", p); });
   method(r, "Tensor", "write_csv", {"string"}, "Tensor", [](void* p, Args& a) { write_text_atomic(a[0].s, csv_text(tensor_of(p))); return Value::object("Tensor", p); });
 
-  // ---- TensorList and StrList (len/at make them foreach collections)
+  // ---- TensorList (len/at make it a foreach collection); StrList is the lmcode std type
   method(r, "TensorList", "add", {"Tensor"}, "TensorList", [](void* p, Args& a) { self<std::vector<torch::Tensor>>(p)->push_back(T(a[0])); return Value::object("TensorList", p); });
   method(r, "TensorList", "len", {}, "int", [](void* p, Args&) { return Value::integer(int64_t(self<std::vector<torch::Tensor>>(p)->size())); });
   method(r, "TensorList", "at", {"int"}, "Tensor", [tensor_ret](void* p, Args& a) {
     auto& v = *self<std::vector<torch::Tensor>>(p);
     if (a[0].i < 0 || a[0].i >= int64_t(v.size())) fail("list index " + std::to_string(a[0].i) + " is out of range for " + std::to_string(v.size()) + " tensors");
     return tensor_ret(v[size_t(a[0].i)]);
-  });
-  method(r, "StrList", "len", {}, "int", [](void* p, Args&) { return Value::integer(int64_t(self<std::vector<std::string>>(p)->size())); });
-  method(r, "StrList", "at", {"int"}, "string", [](void* p, Args& a) {
-    auto& v = *self<std::vector<std::string>>(p);
-    if (a[0].i < 0 || a[0].i >= int64_t(v.size())) fail("list index " + std::to_string(a[0].i) + " is out of range for " + std::to_string(v.size()) + " strings");
-    return Value::string(v[size_t(a[0].i)]);
   });
 
   // ---- Bundle: named tensors plus string metadata in one safetensors file
@@ -815,10 +809,10 @@ void register_torch(dslvm::Registry& r, Host& h) {
     return tensor_ret(it->second);
   });
   method(r, "Bundle", "has", {"string"}, "bool", [](void* p, Args& a) { return Value::boolean(self<BundleBox>(p)->tensors.count(a[0].s) > 0); });
-  method(r, "Bundle", "keys", {}, "StrList", [&h](void* p, Args&) {
+  method(r, "Bundle", "keys", {}, "StrList", [&r](void* p, Args&) {
     std::vector<std::string> keys;
     for (const auto& kv : self<BundleBox>(p)->tensors) keys.push_back(kv.first);
-    return h.hold(h.strlists, "StrList", std::move(keys));
+    return Value::object("StrList", r.std_collections().make_str_list(std::move(keys)));
   });
   method(r, "Bundle", "meta", {"string"}, "string", [](void* p, Args& a) {
     auto& m = self<BundleBox>(p)->meta;
@@ -933,12 +927,13 @@ void register_torch(dslvm::Registry& r, Host& h) {
 }
 
 void print_summary(dslvm::Registry& reg) {
-  std::vector<std::string> order;
+  std::vector<std::string> order, functions;
   std::map<std::string, std::vector<std::string>> members;
   std::cout << "lmtorch DSL host: compile with lmscript against `lmtorch --dsl-schema --json`, run with `lmtorch --dsl FILE.dslb`\n";
   std::cout << "enum DType: F32, F64, I64, BOOL\n";
   for (const auto& sig : reg.signatures()) {
     if (sig.rfind("context ", 0) == 0) std::cout << sig << "\n";
+    else if (sig.rfind("function ", 0) == 0) functions.push_back(sig.substr(9));
     else if (sig.rfind("method ", 0) == 0) {
       std::string body = sig.substr(7), type = body.substr(0, body.find('.'));
       if (!members.count(type)) order.push_back(type);
@@ -949,6 +944,8 @@ void print_summary(dslvm::Registry& reg) {
     std::cout << type << ":\n";
     for (const auto& m : members[type]) std::cout << "  " << m << "\n";
   }
+  std::cout << "lmcode std functions:\n";
+  for (const auto& f : functions) std::cout << "  " << f << "\n";
 }
 }  // namespace
 

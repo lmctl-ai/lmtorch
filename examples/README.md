@@ -2,15 +2,15 @@
 
 Two ways to drive the same `lmtorch` binary from lmscript:
 
-- **lmapi operations** (`*.lms` without `-dsl`): `import "github:lmctl-ai/lmtorch@latest lmtorch";` (lmscript >= 0.2.366)
+- **lmapi operations** (`*.lms` without `-dsl`): `import "github:lmctl-ai/lmtorch@latest lmtorch";` (lmscript >= 0.2.419)
   makes each of the twelve operations a function; every call is one lmtorch process and tensors travel through
   safetensors files. The schema comes from the binary (`lmtorch --cli-schema --json`), the binary is lmtorch on PATH or
   else that release (installed exactly like `install=` below), and every call runs that exact binary.
-- **`_dsl_` programs** (`*-dsl.lms`): a `_dsl_` block is compiled by lmscript into bytecode (`savedsl`), and
+- **`_lmcode_` programs** (`*-dsl.lms`): a `_lmcode_` block is compiled by lmscript into bytecode (`savedsl`), and
   `lmtorch --dsl FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
   memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).
 
-Every block is `_dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (lmscript >= 0.2.366): no schema file and
+Every block is `_lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (lmscript >= 0.2.419): no schema file and
 no manual install.
 
 - `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --dsl-schema --json`) and compiles against exactly
@@ -31,9 +31,9 @@ export PATH="$PWD/build/bin:$PATH"   # optional: a local build wins over install
 lmscript examples/classify-moons-dsl.lms
 ```
 
-## The original recipes and their `_dsl_` versions
+## The original recipes and their `_lmcode_` versions
 
-| lmapi recipe | `_dsl_` version | What changes |
+| lmapi recipe | `_lmcode_` version | What changes |
 |---|---|---|
 | [tensor-chain.lms](tensor-chain.lms) | [tensor-chain-dsl.lms](tensor-chain-dsl.lms) | four processes and four artifacts become one program; operators (`b + a`) |
 | [grad-check.lms](grad-check.lms) | [grad-check-dsl.lms](grad-check-dsl.lms) | adds a finite-difference check in a DSL loop |

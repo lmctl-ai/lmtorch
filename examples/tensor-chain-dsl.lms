@@ -1,4 +1,4 @@
-# _dsl_ version of tensor-chain.lms: the same ones -> matmul -> add -> softmax chain, written as one DSL program that
+# _lmcode_ version of tensor-chain.lms: the same ones -> matmul -> add -> softmax chain, written as one DSL program that
 # runs inside one lmtorch process (the lmapi version spawns four processes and writes four artifacts).
 # Run: lmscript examples/tensor-chain-dsl.lms [run_dir]      (lmtorch on PATH, else installed from the release)
 import "./lib/torchdsl.lms";
@@ -6,7 +6,7 @@ import "./lib/torchdsl.lms";
 RUN = ARGV.get(0, "artifacts/tensor-chain-dsl");
 mkdir(RUN, true);
 
-chain = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+chain = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let a = torch.ones(2, 2);
 let b = a.matmul(a);
@@ -16,7 +16,7 @@ let d = c.softmax(1);
 d.save(run + "/d.safetensors");
 out.set("shape", d.shape()).set("values", d.flatten());
 out.check(d.allclose(torch.full(2, 2, 0.5), 0.0, 0.000001), "softmax of equal rows must be 0.5 everywhere");
-end _dsl_
+end _lmcode_
 
 res = torchdsl.run_block(chain, path_join(RUN, "tensor-chain.dslb"));
 if (res != null) {

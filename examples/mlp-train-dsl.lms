@@ -1,4 +1,4 @@
-# _dsl_ version of mlp-train.lms: the same 2-4-1 ReLU MLP, seeds 11..14, inputs, targets, 20 plain-SGD steps at lr 0.05
+# _lmcode_ version of mlp-train.lms: the same 2-4-1 ReLU MLP, seeds 11..14, inputs, targets, 20 plain-SGD steps at lr 0.05
 # and checkpoint format (w1, b1, w2, b2 + metadata torchcli_format=1, arch=mlp_relu_v1, step). The lmapi version runs
 # 28 lmtorch processes and writes 28 files; here the whole loop is one DSL program in one process. Afterwards the
 # lmapi operation mlp_forward (same executable, schema import) scores the DSL-written checkpoint: both paths agree.
@@ -9,7 +9,7 @@ import "github:lmctl-ai/lmtorch@latest lmtorch";
 RUN = ARGV.get(0, "artifacts/mlp-train-dsl");
 mkdir(RUN, true);
 
-train = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+train = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 # tensor_rand seeds a fresh generator per call; manual_seed + rand draws the same values.
 torch.manual_seed(11);
@@ -48,7 +48,7 @@ torch.save(run + "/x.safetensors", x);
 torch.grad_enabled(false);
 let prediction = forward(x, w1, b1, w2, b2);
 out.set("first", first).set("last", last).set("prediction", prediction.flatten());
-end _dsl_
+end _lmcode_
 
 res = torchdsl.run_block(train, path_join(RUN, "mlp-train.dslb"));
 if (res != null) {

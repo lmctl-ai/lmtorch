@@ -33,7 +33,7 @@ permissions:
 
 env:
   LMCPP_REF: 93a1847c081894ab1e9ed02ad5ea6350b5d5bd06
-  LMCTL_VERSION: 0.2.367   # lmscript with DSL bytecode v5, _dsl_ cli= and install= (R42, R43), import "github:..." (R44)
+  LMCTL_VERSION: 0.2.419   # lmscript with DSL bytecode v5, _lmcode_ blocks, cli= and install= (R42, R43), import "github:..." (R44), @latest (R45)
 
 jobs:
   plan:

@@ -8,7 +8,7 @@
 # The program itself: a matrix product, an autograd gradient and a two-parameter least-squares fit, with known answers.
 # Run: lmscript examples/install-and-run-dsl.lms   (works on a machine with only Node.js and lmscript installed)
 
-p = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+p = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let a = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]");
 out.set("matmul_sum", a.matmul(a).sum().item());
 let x = torch.tensor("[1.0, 2.0, 3.0]").requires_grad(true);
@@ -28,7 +28,7 @@ while (i < 500) {
   i = i + 1;
 }
 out.set("fit_mse", (model.forward(xs) - ys).square().mean().item());
-end _dsl_
+end _lmcode_
 
 file = "install-and-run.dslb";
 savedsl(p, file);

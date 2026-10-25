@@ -9,7 +9,7 @@ import "./lib/torchdsl.lms";
 RUN = ARGV.get(0, "artifacts/cnn-bars-dsl");
 mkdir(RUN, true);
 
-train = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+train = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.manual_seed(3);
 
@@ -51,7 +51,7 @@ torch.grad_enabled(false);
 let acc = model.forward(tx).argmax(1).eq(ty).to(DType.F32).mean().item();
 out.set("test_accuracy", acc).set("architecture", model.summary()).set("parameters", model.num_parameters());
 out.check(acc > 0.95, "the CNN should separate bar orientations");
-end _dsl_
+end _lmcode_
 
 res = torchdsl.run_block(train, path_join(RUN, "train.dslb"));
 if (res == null) { exit(0); }
@@ -74,13 +74,13 @@ for (pic in PICTURES) {
   push(BATCH, [rows]);
 }
 BATCH_JSON = json_stringify(BATCH);
-classify = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+classify = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 torch.grad_enabled(false);
 let model = torch.load_model(run + "/cnn.safetensors").eval();
 let p = model.forward(torch.tensor(${BATCH_JSON}, DType.F32)).softmax(1);
 out.set("label", p.argmax(1)).set("confidence", p.amax(1));
-end _dsl_
+end _lmcode_
 c = torchdsl.run_block(classify, path_join(RUN, "classify.dslb"));
 NAMES = ["horizontal", "vertical"];
 for (i = 0; i < len(PICTURES); i = i + 1) {

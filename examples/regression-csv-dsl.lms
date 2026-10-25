@@ -23,7 +23,7 @@ CSV = path_join(RUN, "houses.csv");
 write_file(CSV, join(rows, "\n") + "\n");
 println(f"1 data: {len(rows) - 1} rows -> {CSV}");
 
-fit = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+fit = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
 let table = torch.read_csv(${CSV}, true);
 let x = table.slice(1, 0, 3);
@@ -52,7 +52,7 @@ torch.cat(torch.list().add(y).add(pred), 1).write_csv(run + "/predictions.csv");
 # Undo the standardization: price = sum(w_i / std_i * x_i) + b - sum(w_i * mean_i / std_i).
 let w_units = w.t().div(std);
 out.set("weights", w_units.flatten()).set("bias", (b - (w_units * mean).sum()).item()).set("train_mse", loss);
-end _dsl_
+end _lmcode_
 
 res = torchdsl.run_block(fit, path_join(RUN, "fit.dslb"));
 if (res == null) { exit(0); }

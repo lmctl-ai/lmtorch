@@ -15,7 +15,7 @@ muted = dark ? "#b4c2d0" : "#526274";
 blue = dark ? "#79d4c3" : "#087f72";
 orange = dark ? "#f5c16c" : "#ad6500";
 edge = dark ? "#dce4ed" : "#26384c";
-p = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+p = _lmcode_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
 if (${mobile}) {
   scene.canvas(780, 990, ${bg});
   scene.text(54.0, 115.0, 68.0, "Two moons.", ${ink}).set_attr("font-weight", "700");
@@ -55,7 +55,7 @@ if (${mobile}) {
   scene.path(${P1C}, ${orange}, "none", 1.0); scene.path(${P1D}, ${orange}, "none", 1.0);
   scene.render_png(${PNG}, 1400, 620, 1);
 }
-end _dsl_
+end _lmcode_
 host = "build/readme-hero-" + layout + "-" + theme + ".dslb";
 savedsl(p, host);
 r = system ${dsl_cli(p)} --dsl ${host};

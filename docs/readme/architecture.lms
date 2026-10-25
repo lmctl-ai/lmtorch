@@ -5,7 +5,7 @@ bg = dark ? "#111c28" : "#f4f7fb";
 panel = dark ? "#203447" : "#ffffff";
 ink = dark ? "#f2f6f7" : "#172434";
 accent = dark ? "#f5c16c" : "#ad6500";
-p = _dsl_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
+p = _lmcode_ cli="lmdraw" install="github:lmctl-ai/lmdraw@latest";
 scene.canvas(1200, 720, ${bg});
 scene.rect(60.0, 18.0, 1080.0, 132.0, ${panel});
 scene.rect(60.0, 192.0, 1080.0, 132.0, ${panel});
@@ -19,7 +19,7 @@ let a = scene.line(600.0, 158.0, 600.0, 182.0, ${accent}, 4.0); a.set_attr("mark
 let b = scene.line(600.0, 332.0, 600.0, 356.0, ${accent}, 4.0); b.set_attr("marker-end", "arrow");
 let c = scene.line(600.0, 506.0, 600.0, 530.0, ${accent}, 4.0); c.set_attr("marker-end", "arrow");
 scene.render_png(${PNG}, 1200, 720, 1);
-end _dsl_
+end _lmcode_
 host = "build/readme-architecture-" + theme + ".dslb";
 savedsl(p, host);
 r = system ${dsl_cli(p)} --dsl ${host};

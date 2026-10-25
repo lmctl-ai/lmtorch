@@ -21,7 +21,7 @@ Run CPU tensors, automatic differentiation, and small neural networks from LMScr
   <img alt="LMScript flows through the DSL schema and native lmtorch host to tensor results." src="docs/readme/architecture-light.png" width="100%">
 </picture>
 
-The same executable supports safetensors operations and compiled `_dsl_` programs. Models, gradients, and tensor data stay in the native host; no Python runtime is needed.
+The same executable supports safetensors operations and compiled `_lmcode_` programs. Models, gradients, and tensor data stay in the native host; no Python runtime is needed.
 
 ## Examples
 

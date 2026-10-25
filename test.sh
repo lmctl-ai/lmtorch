@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The native test suite (no docker): SDK pin, schema and signature parity, static-binary check, C++ unit tests, the DSL
-# API and refusal suites, every _dsl_ example, the lmapi recipes, and (when a Python with torch is available) the PyTorch
+# API and refusal suites, every _lmcode_ example, the lmapi recipes, and (when a Python with torch is available) the PyTorch
 # oracles for both front ends.
 #   LMTORCH_BIN       binary under test (default build/bin/lmtorch, else build-dev/bin/lmtorch)
 #   LMSCRIPT_BIN       compiler (default lmscript on PATH; must emit DSL bytecode v5)
@@ -35,7 +35,7 @@ pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
-[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.366), or set LMSCRIPT_BIN"
+[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.419), or set LMSCRIPT_BIN"
 # Schema-module imports and the examples' cli="lmtorch" blocks find lmtorch by name, so the binary under test is first on
 # PATH; install= must then never download. An empty private tool cache proves it after the examples (below).
 [ "$(basename "$BIN")" = "lmtorch$EXE" ] || fail "LMTORCH_BIN must be named lmtorch$EXE (cli=\"lmtorch\" looks it up on PATH): $BIN"
@@ -61,9 +61,18 @@ if [ "$code" != 0 ] || [ ! -s "$WORK/smoke.json" ]; then
   fi
   fail "$BIN does not start (exit $code)"
 fi
-scripts/sync-sdk.sh --verify >/dev/null || fail "third_party/dslvm/dslvm.hpp differs from sdk.lock"
-ok "vendored dslvm.hpp matches sdk.lock"
-printf 'p = _dsl_ schema="%s";\nwhile (false) {}\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
+scripts/sync-sdk.sh --verify >/dev/null || fail "vendored lmcode-cpp files differ from sdk.lock: $(scripts/sync-sdk.sh --verify 2>&1)"
+ok "vendored lmcode-cpp VM, std headers, std schema and merge helper match sdk.lock"
+# schema/lmtorch.dsl.json is generated: the host-only schema merged with the pinned lmcode std schema.
+# (Windows: python3 may be the Microsoft Store stub, so python comes first there.)
+if [ "$OS" = windows ]; then SYS_PYTHON="$(command -v python || command -v python3 || true)"; else SYS_PYTHON="$(command -v python3 || command -v python || true)"; fi
+[ -n "$SYS_PYTHON" ] || fail "python3 not found (needed to check the std schema merge)"
+"$SYS_PYTHON" scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json schema/lmtorch.host.json - | cmp - schema/lmtorch.dsl.json \
+  || fail "schema/lmtorch.dsl.json is stale: python3 scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json schema/lmtorch.host.json schema/lmtorch.dsl.json"
+"$SYS_PYTHON" scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json --host-only schema/lmtorch.dsl.json - | "$SYS_PYTHON" -c 'import json,sys; d=lambda o: {k: v for k, v in o.items() if v != {}}; sys.exit(d(json.load(sys.stdin)) != d(json.load(open(sys.argv[1]))))' schema/lmtorch.host.json \
+  || fail "stripping std from schema/lmtorch.dsl.json does not give schema/lmtorch.host.json"
+ok "schema/lmtorch.dsl.json = schema/lmtorch.host.json + lmcode std (and back)"
+printf 'p = _lmcode_ schema="%s";\nwhile (false) {}\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
 "$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v5 while loop against the schema"
 [ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 5 ] || fail "$LMSCRIPT does not emit bytecode v5"
 ok "compiler $("$LMSCRIPT" --version) emits DSL bytecode v5"
@@ -88,15 +97,40 @@ want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLis
 set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
 [ "$code" = 2 ] || fail "--version with an extra argument must be refused (exit $code)"
 ok "--version prints '$want' (host flag standard; lmscript install=...@latest compares it with the release tag)"
-# _dsl_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
-printf 'p = _dsl_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _dsl_\nsavedsl(p, "%s");\n' "$BIN" "$WORK/cli.dslb" > "$WORK/cli.lms"
+# _lmcode_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
+printf 'p = _lmcode_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _lmcode_\nsavedsl(p, "%s");\n' "$BIN" "$WORK/cli.dslb" > "$WORK/cli.lms"
 if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then
   "$LMSCRIPT" "$WORK/cli.lms" >/dev/null || fail "compiling with cli=$BIN"
   (cd "$WORK" && "$BIN" --dsl cli.dslb) | grep -q '"v":3.0' || fail "running a cli= compiled program"
-  ok "_dsl_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
+  ok "_lmcode_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
 else
-  echo "# skipped: _dsl_ cli= (this lmscript predates lmscript R42)"
+  echo "# skipped: _lmcode_ cli= (this lmscript predates lmscript R42)"
 fi
+# The lmcode std catalog is built into the registry (lmtorch registers none of it): strings, math, collections and
+# files, and Bundle.keys() returns the std StrList (so join/contains work on it).
+cat > "$WORK/std.lms" <<LMS
+p = _lmcode_ schema="$HERE_N/schema/lmtorch.dsl.json";
+let b = torch.bundle().put("w", torch.ones(2)).put("b", torch.zeros(1));
+let names = b.keys();
+out.set("keys", names.join("+"));
+out.set("has_w", names.contains("w"));
+out.set("upper", str_upper(str_trim("  ok ")));
+out.set("root", math_sqrt(16.0));
+let xs = int_list().add(3).add(4);
+out.set("xs", xs.len() + xs.at(1));
+let parts = str_split("a,b,c", ",");
+out.set("parts", parts.len());
+file_write("std.txt", str_repeat("ab", 2));
+out.set("file", file_read("std.txt") + str(file_exists("std.txt")));
+end _lmcode_
+savedsl(p, "$WORK/std.dslb");
+LMS
+"$LMSCRIPT" "$WORK/std.lms" >/dev/null || fail "compiling a block that uses lmcode std"
+(cd "$WORK" && "$BIN" --dsl std.dslb) > "$WORK/std.out" || fail "running lmcode std: $(cat "$WORK/std.out")"
+for want in '"keys":"b+w"' '"has_w":true' '"upper":"OK"' '"root":4.0' '"xs":6' '"parts":3' '"file":"ababtrue"'; do
+  grep -qF "$want" "$WORK/std.out" || fail "lmcode std: missing $want in $(cat "$WORK/std.out")"
+done
+ok "lmcode std (strings, math, lists, files) runs from the built-in registry; Bundle.keys() is a std StrList"
 
 # Release form: libtorch and the C++ runtime static; only the operating system's own libraries are dynamic.
 size="$(wc -c < "$BIN" | tr -d ' ')"
@@ -142,18 +176,18 @@ mkdir -p "$WORK/negative"
 (cd "$WORK/negative" && "$LMSCRIPT" "$HERE_N/tests/dsl/negative.lms" "$BIN") > "$WORK/negative.log" || fail "refusal suite: $(cat "$WORK/negative.log")"
 ok "$(tail -1 "$WORK/negative.log")"
 # The two front ends share the safetensors reader: a BOOL artifact written by the DSL is a coded lmapi refusal.
-printf 'p = _dsl_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _dsl_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
+printf 'p = _lmcode_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
 "$LMSCRIPT" "$WORK/bools.lms" >/dev/null
 (cd "$WORK" && "$BIN" --dsl bools.dslb >/dev/null) || fail "writing a BOOL artifact"
 set +e; (cd "$WORK" && "$BIN" tensor_inspect --input bools.safetensors#tensor) > "$WORK/bools.json"; code=$?; set -e
 [ "$code" = 2 ] && grep -q '"tool_code": "INVALID_DTYPE"' "$WORK/bools.json" || fail "lmapi on a BOOL artifact: exit $code $(cat "$WORK/bools.json")"
 ok "a DSL-written BOOL artifact is a coded lmapi refusal (INVALID_DTYPE)"
-printf 'p = _dsl_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _dsl_\n' "$HERE_N/schema/lmtorch.dsl.json" > "$WORK/illtyped.lms"
+printf 'p = _lmcode_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _lmcode_\n' "$HERE_N/schema/lmtorch.dsl.json" > "$WORK/illtyped.lms"
 set +e; "$LMSCRIPT" --check "$WORK/illtyped.lms" > "$WORK/illtyped.log" 2>&1; code=$?; set -e
 [ "$code" = 2 ] && grep -q 'illtyped.lms:2:' "$WORK/illtyped.log" || fail "ill-typed chunk: exit $code $(cat "$WORK/illtyped.log")"
 ok "an ill-typed chunk is a located compile error (exit 2) before anything runs"
 
-# Every _dsl_ example, from a scratch workspace (outputs must stay inside the working directory).
+# Every _lmcode_ example, from a scratch workspace (outputs must stay inside the working directory).
 run_example() {
   local name="$1" expect="$2"; shift 2
   (cd "$WORK" && "$LMSCRIPT" "$HERE_N/examples/$name.lms" "$@") > "$WORK/$name.log" 2>&1 || fail "$name: $(cat "$WORK/$name.log")"
@@ -185,7 +219,7 @@ for f in examples/*.lms; do
 done
 ok "every example passes lmscript --check"
 [ ! -e "$WORK/tool-cache" ] || fail "an example downloaded a release instead of using the binary under test: $(find "$WORK/tool-cache" -type f)"
-ok "_dsl_ cli= blocks and github: imports bound to the binary under test (nothing downloaded)"
+ok "_lmcode_ cli= blocks and github: imports bound to the binary under test (nothing downloaded)"
 
 if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, numpy' 2>/dev/null; then
   "$ORACLE_PYTHON" tests/dsl_oracle.py "$BIN" "$LMSCRIPT_PY" > "$WORK/oracle.log" 2>&1 || fail "DSL oracle: $(tail -60 "$WORK/oracle.log")"

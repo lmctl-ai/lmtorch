@@ -1,23 +1,25 @@
-# lmtorch `_dsl_` API
+# lmtorch `_lmcode_` API
 
-`schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5). `lmtorch --dsl-schema` prints this list grouped by
+`schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5): lmtorch's own declarations (`schema/lmtorch.host.json`)
+merged with the lmcode std schema, which the lmcode-cpp VM implements (see [lmcode std](#lmcode-std)). A block may use
+`_dsl_` or `_lmcode_`; both compile to the same bytecode. `lmtorch --dsl-schema` prints this list grouped by
 type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs, so a block can name the binary
-instead of a schema file: `prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.366)
+instead of a schema file: `prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.419)
 compiles against the binary's own schema, which can never drift from the binary that runs it. `install=` downloads the
 newest release (`@latest`; pin `@vX.Y.Z` for reproducibility, verified against GitHub's SHA-256 digest) when lmtorch is not on PATH, and `dsl_cli(prog)` is the argv prefix of
 the binary the block was compiled against. `lmtorch --cli-schema` prints the
 lmapi document (the same as lmapi's `--schema`); `lmtorch --dsl-signatures` prints
 the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatures schema/lmtorch.dsl.json`.
 
-A program is an lmscript `_dsl_` block compiled to bytecode and run by the native host:
+A program is an lmscript `_lmcode_` block compiled to bytecode and run by the native host:
 
 ```lmscript
-prog = _dsl_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let x = torch.tensor("[[1.0, 2.0], [3.0, 4.0]]").requires_grad(true);
 let loss = (x.matmul(x) + 1.0).square().mean();
 loss.backward();
 out.set("loss", loss.item()).set("grad", x.grad());
-end _dsl_
+end _lmcode_
 savedsl(prog, "prog.dslb");
 r = system ${dsl_cli(prog)} --dsl prog.dslb;   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
 ```
@@ -84,10 +86,10 @@ no `/` operator mapping in schema 2, so division is `a.div(b)`. Arithmetic broad
 
 Dimensions may be negative (from the end). Tensors are CPU-only.
 
-## TensorList, StrList, Bundle
+## TensorList, Bundle
 
-`TensorList`: `add(t)` (chains), `len()`, `at(i)`; `for (t in list) { ... }` iterates it. `StrList`: `len()`, `at(i)`.
-`Bundle`: `put(name, t)`, `get(name)`, `has(name)`, `keys()` (sorted StrList), `meta(key)`, `meta(key, value)`,
+`TensorList`: `add(t)` (chains), `len()`, `at(i)`; `for (t in list) { ... }` iterates it.
+`Bundle`: `put(name, t)`, `get(name)`, `has(name)`, `keys()` (sorted std `StrList`), `meta(key)`, `meta(key, value)`,
 `has_meta(key)`, `save(path)`. A bundle stores handles; `save` writes the values current at that moment.
 
 ## Model and Optimizer
@@ -132,6 +134,25 @@ absolute paths elsewhere are refused; on Windows the comparison ignores case, an
 such as `CON` and names ending in a dot or space are refused). DSL saves replace an existing file atomically (temporary
 file, then rename; `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH` on Windows).
 Formats: safetensors (F32, F64, I64, BOOL; header ≤ 1 MiB, file ≤ 256 MiB), CSV, text.
+
+## lmcode std
+
+The lmcode-cpp VM registers the lmcode std catalog itself (72 signatures; lmtorch implements none of it), so every
+block can use, besides lmtorch's API:
+
+- strings: `str_len`, `str_upper`, `str_lower`, `str_trim`, `str_find`, `str_contains`, `str_starts_with`,
+  `str_ends_with`, `str_substr`, `str_replace`, `str_repeat`, `str_split` (-> `StrList`), `str_match`, `str_is_int`,
+  `str_is_float`, `str_to_int`, `str_to_float`;
+- math (int and float overloads): `math_abs`, `math_ceil`, `math_floor`, `math_round`, `math_sqrt`, `math_pow`,
+  `math_min`, `math_max`;
+- collections: `str_list()`, `int_list()`, `float_list()` (`add`, `at`, `set`, `len`, `clear`, `contains`, `index_of`;
+  `StrList.join(sep)`), `str_map()`;
+- files: `file_read`, `file_write`, `file_append`, `file_exists`, `file_lines` (relative paths resolve against the
+  working directory). Unlike lmtorch's own loads and saves, std file calls are **not** confined to the working directory
+  and std writes are not atomic (a failed one can leave a partial file).
+
+Std collections live for one run (one `lmtorch --dsl` file); the generated reference with exact semantics and errors is
+[lmcode-cpp docs/std.md](https://github.com/lmctl-ai/lmcode-cpp/blob/main/docs/std.md).
 
 ## Handle lifetime
 

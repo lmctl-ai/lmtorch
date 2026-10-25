@@ -17,7 +17,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 schema = os.path.join(os.path.dirname(here), "schema", "lmtorch.dsl.json")
 
 PROGRAM = r'''
-p = _dsl_ schema=${SCHEMA};
+p = _lmcode_ schema=${SCHEMA};
 torch.manual_seed(123);
 out.set("rand", torch.rand(3, 2)).set("randn", torch.randn(4)).set("randint", torch.randint(0, 10, 5)).set("randperm", torch.randperm(7));
 torch.manual_seed(7);
@@ -52,7 +52,7 @@ out.set("softmax", x.softmax(1)).set("log_softmax", x.log_softmax(1)).set("std",
 out.set("mse", x.mse_loss(x.sin()).item()).set("bce", x.bce_with_logits(x.sigmoid()).item());
 let py = torch.load_model("py-model.safetensors");
 out.set("py_forward", py.forward(x));
-end _dsl_
+end _lmcode_
 savedsl(p, "oracle.dslb");
 '''
 

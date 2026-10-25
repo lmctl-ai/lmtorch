@@ -33,22 +33,22 @@ fn fails_at(name, prog, line_no, code, phase, err, fragment) {
 write_file("bad-magic.dslb", "NOPE");
 expect("bad magic", run_files(["bad-magic.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "bad magic");
 expect("missing file", run_files(["no-such.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "no-such.dslb");
-ok_prog = _dsl_ schema="../../schema/lmtorch.dsl.json";
+ok_prog = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.set("ran", true);
-end _dsl_
+end _lmcode_
 savedsl(ok_prog, "ok.dslb");
 r = system(["sh", "-c", "head -c 60 ok.dslb > truncated.dslb"]);
 expect("truncated", run_files(["truncated.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "truncated");
 r = system(["sh", "-c", "cat ok.dslb > trailing.dslb && printf x >> trailing.dslb"]);
 expect("trailing bytes", run_files(["trailing.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "trailing");
-mismatch = _dsl_ schema="fixtures/other-schema-bytes.dsl.json";
+mismatch = _lmcode_ schema="fixtures/other-schema-bytes.dsl.json";
 out.set("ran", true);
-end _dsl_
+end _lmcode_
 savedsl(mismatch, "mismatch.dslb");
 expect("schema bytes differ", run_files(["mismatch.dslb"]), 3, "load", "LOAD_SCHEMA_MISMATCH", "schema mismatch");
-writes = _dsl_ schema="../../schema/lmtorch.dsl.json";
+writes = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.write_text("side-effect.txt", "ran");
-end _dsl_
+end _lmcode_
 savedsl(writes, "writes.dslb");
 expect("a bad later file is refused before anything runs", run_files(["writes.dslb", "bad-magic.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "bad-magic.dslb");
 if (file_exists("side-effect.txt")) { push(FAILED, "side effect"); println("FAIL: the first file ran although a later file was refused"); }
@@ -64,228 +64,228 @@ for (args in [["--dsl"], ["--dsl", "--x"], ["--dsl-schema", "--bad"], ["--dsl-si
 }
 
 # ---- run-time failures: located host errors (exit 3), VM errors and application failures (exit 4)
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let m = torch.mark();
 let t = torch.ones(2);
 torch.release(m);
 out.set("x", t.sum().item());
-end _dsl_
+end _lmcode_
 fails_at("released handle", p, 71, 3, "run", "RUN_HOST", "released by torch.release()");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.ones(2).save("../escape.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("save outside the working directory", p, 75, 3, "run", "RUN_HOST", "escapes");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let x = torch.read_csv("/etc/hostname", false);
-end _dsl_
+end _lmcode_
 fails_at("read outside the working directory", p, 79, 3, "run", "RUN_HOST", "escapes");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let l = torch.ones(2, 1).mse_loss(torch.ones(2));
-end _dsl_
+end _lmcode_
 fails_at("loss shape mismatch", p, 83, 3, "run", "RUN_HOST", "target shape [2] differs from input shape [2, 1]");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let y = torch.ones(2, 3).matmul(torch.ones(2, 3));
-end _dsl_
+end _lmcode_
 fails_at("matmul shapes (libtorch message)", p, 87, 3, "run", "RUN_HOST", "Tensor.matmul: mat1 and mat2 shapes cannot be multiplied");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.ones(3).requires_grad(true).mul(2.0).backward();
-end _dsl_
+end _lmcode_
 fails_at("backward on a vector", p, 91, 3, "run", "RUN_HOST", "one-element (scalar) result");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.ones(3).sum().backward();
-end _dsl_
+end _lmcode_
 fails_at("backward without a grad leaf", p, 95, 3, "run", "RUN_HOST", "does not depend on any requires_grad(true) leaf");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let g = torch.ones(3).requires_grad(true).grad();
-end _dsl_
+end _lmcode_
 fails_at("grad before backward", p, 99, 3, "run", "RUN_HOST", "tensor has no gradient");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let g = torch.arange(3).requires_grad(true);
-end _dsl_
+end _lmcode_
 fails_at("integer tensors cannot require grad", p, 103, 3, "run", "RUN_HOST", "only F32 and F64");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[[1, 2], [3]]");
-end _dsl_
+end _lmcode_
 fails_at("ragged literal", p, 107, 3, "run", "RUN_HOST", "ragged nested list");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[1, oops]");
-end _dsl_
+end _lmcode_
 fails_at("malformed literal", p, 111, 3, "run", "RUN_HOST", "not a JSON number or nested list");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[true, 1]");
-end _dsl_
+end _lmcode_
 fails_at("mixed literal", p, 115, 3, "run", "RUN_HOST", "cannot mix booleans and numbers");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[1.5]", DType.I64);
-end _dsl_
+end _lmcode_
 fails_at("I64 literal must be integral", p, 119, 3, "run", "RUN_HOST", "I64 elements must be integers");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[1e400]", DType.F64);
-end _dsl_
+end _lmcode_
 fails_at("overflowing literal", p, 123, 3, "run", "RUN_HOST", "number overflow parsing");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let v = torch.ones(3).value(3);
-end _dsl_
+end _lmcode_
 fails_at("flat index range", p, 127, 3, "run", "RUN_HOST", "flat index 3 is out of range for 3 elements");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let v = torch.ones(3).item();
-end _dsl_
+end _lmcode_
 fails_at("item of a vector", p, 131, 3, "run", "RUN_HOST", "item() needs a one-element tensor");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let v = torch.ones(3).sum(2);
-end _dsl_
+end _lmcode_
 fails_at("dimension range", p, 135, 3, "run", "RUN_HOST", "dimension 2 is out of range");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let v = torch.zeros(-1);
-end _dsl_
+end _lmcode_
 fails_at("negative dimension", p, 139, 3, "run", "RUN_HOST", "dimensions must be nonnegative");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let v = torch.zeros(65536, 65536);
-end _dsl_
+end _lmcode_
 fails_at("oversized tensor", p, 143, 3, "run", "RUN_HOST", "exceeds 2^31 elements");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let w = torch.where(torch.ones(2), torch.ones(2), torch.ones(2));
-end _dsl_
+end _lmcode_
 fails_at("where needs a BOOL condition", p, 147, 3, "run", "RUN_HOST", "BOOL tensor");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let o = torch.sgd(torch.list().add(torch.ones(2)), 0.1);
-end _dsl_
+end _lmcode_
 fails_at("optimizer needs grad leaves", p, 151, 3, "run", "RUN_HOST", "leaf tensors with requires_grad(true)");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let o = torch.adam(torch.sequential().relu(), 0.1);
-end _dsl_
+end _lmcode_
 fails_at("optimizer on a parameterless model", p, 155, 3, "run", "RUN_HOST", "model has no parameters");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let o = torch.sgd(torch.sequential().linear(1, 1), -1.0);
-end _dsl_
+end _lmcode_
 fails_at("negative learning rate", p, 159, 3, "run", "RUN_HOST", "learning rate must be positive");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.sequential().linear(2, 3).save("m.safetensors");
 let m = torch.sequential().linear(2, 4).load("m.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("load into a different architecture", p, 164, 3, "run", "RUN_HOST", "the model expects F32[4]");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.save("plain.safetensors", torch.ones(1));
 let m = torch.load_model("plain.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("load_model on a plain tensor file", p, 169, 3, "run", "RUN_HOST", "not a model saved by Model.save");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let m = torch.sequential().forward(torch.ones(1));
-end _dsl_
+end _lmcode_
 fails_at("forward through an empty model", p, 173, 3, "run", "RUN_HOST", "model has no layers");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.write_text("bad.csv", "1,2\n3,x\n");
 let t = torch.read_csv("bad.csv", false);
-end _dsl_
+end _lmcode_
 fails_at("CSV with a non-number", p, 178, 3, "run", "RUN_HOST", "bad.csv:2: not a finite number: 'x'");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.write_text("ragged.csv", "1,2\n3\n");
 let t = torch.read_csv("ragged.csv", false);
-end _dsl_
+end _lmcode_
 fails_at("CSV with a short row", p, 183, 3, "run", "RUN_HOST", "ragged.csv:2: expected 2 columns, found 1");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.load("no-such.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("load a missing file", p, 187, 3, "run", "RUN_HOST", "cannot open tensor artifact");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.bundle().save("empty.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("save an empty bundle", p, 191, 3, "run", "RUN_HOST", "cannot save an empty bundle");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let n = torch.release(99999);
-end _dsl_
+end _lmcode_
 fails_at("bogus release mark", p, 195, 3, "run", "RUN_HOST", "is not a value returned by torch.mark()");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.set("k", 1.0).append("k", 2.0);
-end _dsl_
+end _lmcode_
 fails_at("append onto a scalar result", p, 199, 3, "run", "RUN_HOST", "is not a list");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let zero = torch.ones(1).numel() - 1;
 let q = 1 / zero;
-end _dsl_
+end _lmcode_
 fails_at("int division by zero (VM error)", p, 204, 3, "run", "RUN_ERROR", "int division by zero");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.check(torch.ones(2).sum().item() == 3.0, "two ones make three");
-end _dsl_
+end _lmcode_
 fails_at("out.check", p, 208, 4, "app", "APP_FAIL", "check failed: two ones make three");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.set("before", 1);
 out.fail("stop here");
-end _dsl_
+end _lmcode_
 fails_at("out.fail", p, 213, 4, "app", "APP_FAIL", "stop here");
 
 # ---- regressions from the second bug-hunting round (2026-10-20)
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[3, [1, 2]]");
-end _dsl_
+end _lmcode_
 fails_at("scalar before a list is ragged (read uninitialized memory before the fix)", p, 219, 3, "run", "RUN_HOST", "ragged nested list");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.tensor("[[1, 2], [3, [4]]]");
-end _dsl_
+end _lmcode_
 fails_at("a list where a number belongs is ragged", p, 223, 3, "run", "RUN_HOST", "ragged nested list");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.sequential().relu().save("relu-only.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("saving a parameterless model", p, 227, 3, "run", "RUN_HOST", "model has no parameters to save");
 # A BOOL payload byte other than 0/1: header {"tensor":...} padded to 64 bytes, then bytes 0x02 0x07.
 r = system(["sh", "-c", "printf '\\100\\000\\000\\000\\000\\000\\000\\000{\"tensor\":{\"dtype\":\"BOOL\",\"shape\":[2],\"data_offsets\":[0,2]}}    \\002\\007' > badbool.safetensors"]);
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let t = torch.load("badbool.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("BOOL bytes must be 0 or 1", p, 233, 3, "run", "RUN_HOST", "holds a byte other than 0 or 1");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.sequential().linear(2, 2).save("two.safetensors");
 let b = torch.open("two.safetensors").meta("layers", "linear(2, 2) -> warp(3)");
 b.save("bad-layers.safetensors");
 let m = torch.load_model("bad-layers.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("load_model with an unknown layer", p, 240, 3, "run", "RUN_HOST", "unknown layer 'warp'");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let b = torch.bundle().put("0.weight", torch.zeros(2, 2)).put("0.bias", torch.zeros(2)).put("extra", torch.zeros(1));
 b.save("extra.safetensors");
 let m = torch.sequential().linear(2, 2).load("extra.safetensors");
-end _dsl_
+end _lmcode_
 fails_at("Model.load refuses unexpected tensors", p, 246, 3, "run", "RUN_HOST", "has tensor 'extra' that this model does not have");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let w = torch.ones(2).requires_grad(true);
 let l = (w * w).sum();
 l.backward();
 l.backward();
-end _dsl_
+end _lmcode_
 fails_at("backward twice through a freed graph (libtorch message)", p, 253, 3, "run", "RUN_HOST", "backward through the graph a second time");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let v = torch.ones(2, 3).t().set(0, 5.0);
-end _dsl_
+end _lmcode_
 fails_at("set on a non-contiguous view", p, 257, 3, "run", "RUN_HOST", "needs a contiguous tensor");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let x = torch.ones(2).index_select(0, torch.tensor("[5]"));
-end _dsl_
+end _lmcode_
 fails_at("index_select out of range (libtorch message)", p, 261, 3, "run", "RUN_HOST", "Tensor.index_select:");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let k = torch.list().add(torch.ones(1)).at(1);
-end _dsl_
+end _lmcode_
 fails_at("TensorList index", p, 265, 3, "run", "RUN_HOST", "list index 1 is out of range for 1 tensors");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.set_num_threads(0);
-end _dsl_
+end _lmcode_
 fails_at("thread count", p, 269, 3, "run", "RUN_HOST", "thread count must be between 1 and 256");
-p = _dsl_ schema="../../schema/lmtorch.dsl.json";
+p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.write_text("missing-dir/x.txt", "x");
-end _dsl_
+end _lmcode_
 fails_at("write into a missing directory names the path", p, 273, 3, "run", "RUN_HOST", "cannot write missing-dir/x.txt");
 
 # Autograd recording is per file: a file that turns it off must not break training in the next file.
-off = _dsl_ schema="../../schema/lmtorch.dsl.json";
+off = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 torch.grad_enabled(false);
 torch.manual_seed(1);
 out.set("first_draw", torch.rand(1).item());
-end _dsl_
-train_next = _dsl_ schema="../../schema/lmtorch.dsl.json";
+end _lmcode_
+train_next = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let w = torch.ones(2).requires_grad(true);
 let l = (w * 3.0).sum();
 l.backward();
 out.set("grad_ok", w.grad().sum().item() == 6.0).set("second_draw", torch.rand(1).item());
-end _dsl_
+end _lmcode_
 savedsl(off, "off.dslb");
 savedsl(train_next, "train-next.dslb");
 seq = run_files(["off.dslb", "train-next.dslb"]);
