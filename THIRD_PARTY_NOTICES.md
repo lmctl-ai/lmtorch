@@ -15,7 +15,7 @@ confirmed by symbol inspection of the aarch64 build (2026-10-20); libtorch comes
 | miniz | MIT | `miniz-LICENSE` |
 | pocketfft | BSD-3-Clause | `pocketfft-LICENSE` |
 | nlohmann/json | MIT | `nlohmann-json-LICENSE` |
-| cpp-dsl-sdk `dslvm.hpp` (vendored, `sdk.lock`) | MIT | `cpp-dsl-sdk-LICENSE` |
+| lmcode-cpp `dslvm.hpp` (vendored, `sdk.lock`) | MIT | `lmcode-cpp-LICENSE` |
 | lmcpp (pinned revision 93a1847) | MIT | `lmcpp-LICENSE` |
 | libstdc++, libgcc (GCC; Linux executables) | GPL-3.0-or-later with GCC Runtime Library Exception 3.1 | (the exception lets compiled programs use any license) |
 | Microsoft C/C++ runtime, static (`libcmt`, `libvcruntime`, `libucrt`, `libcpmt`; Windows executable) | Visual Studio license terms (Distributable Code) | (redistribution as part of a program is permitted; no notice is required) |

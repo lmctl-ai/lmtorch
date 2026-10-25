@@ -12,6 +12,6 @@ Navigation for agents. Code and `./test.sh` take precedence over these notes.
 Elsewhere in the repository: `docs/dsl-api.md` (DSL API reference), `docs/parity.md` (lmapi operation boundary),
 `examples/README.md` (both example families), `DESIGN.md` (the original lmcpp/lmapi design).
 
-Related checkouts on the development host: `../poc/cpp-dsl-sdk` (a checkout of lmctl-ai/lmcode-cpp, the VM and std; durable-memory/index.md there; `LMCODE_CPP=../poc/cpp-dsl-sdk scripts/sync-sdk.sh` re-vendors),
+Related checkouts on the development host: `../poc/lmcode-cpp` (lmctl-ai/lmcode-cpp, the VM and std; durable-memory/index.md there; `LMCODE_CPP=../poc/lmcode-cpp scripts/sync-sdk.sh` re-vendors),
 `../poc/lmcad`, `../poc/lmhtml` (sibling DSL hosts this one copies), `../lmctl-mono/lmscript/durable-memory/dsl-framework.md`
 (the `_lmcode_` framework and language spec), `../lmcpp` (the lmapi C++ SDK; lmtorch pins revision f6c6f51).
