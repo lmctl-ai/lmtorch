@@ -35,7 +35,7 @@ pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
-[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.419), or set LMSCRIPT_BIN"
+[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.420), or set LMSCRIPT_BIN"
 # Schema-module imports and the examples' cli="lmtorch" blocks find lmtorch by name, so the binary under test is first on
 # PATH; install= must then never download. An empty private tool cache proves it after the examples (below).
 [ "$(basename "$BIN")" = "lmtorch$EXE" ] || fail "LMTORCH_BIN must be named lmtorch$EXE (cli=\"lmtorch\" looks it up on PATH): $BIN"
@@ -63,15 +63,14 @@ if [ "$code" != 0 ] || [ ! -s "$WORK/smoke.json" ]; then
 fi
 scripts/sync-sdk.sh --verify >/dev/null || fail "vendored lmcode-cpp files differ from sdk.lock: $(scripts/sync-sdk.sh --verify 2>&1)"
 ok "vendored lmcode-cpp VM, std headers, std schema and merge helper match sdk.lock"
-# schema/lmtorch.dsl.json is generated: the host-only schema merged with the pinned lmcode std schema.
+# The embedded schema is host-only; the lmcode compiler and default SDK registry supply the standard signatures.
 # (Windows: python3 may be the Microsoft Store stub, so python comes first there.)
 if [ "$OS" = windows ]; then SYS_PYTHON="$(command -v python || command -v python3 || true)"; else SYS_PYTHON="$(command -v python3 || command -v python || true)"; fi
 [ -n "$SYS_PYTHON" ] || fail "python3 not found (needed to check the std schema merge)"
-"$SYS_PYTHON" scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json schema/lmtorch.host.json - | cmp - schema/lmtorch.dsl.json \
-  || fail "schema/lmtorch.dsl.json is stale: python3 scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json schema/lmtorch.host.json schema/lmtorch.dsl.json"
+cmp schema/lmtorch.host.json schema/lmtorch.dsl.json || fail "schema/lmtorch.dsl.json is stale: copy the host-only schema"
 "$SYS_PYTHON" scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json --host-only schema/lmtorch.dsl.json - | "$SYS_PYTHON" -c 'import json,sys; d=lambda o: {k: v for k, v in o.items() if v != {}}; sys.exit(d(json.load(sys.stdin)) != d(json.load(open(sys.argv[1]))))' schema/lmtorch.host.json \
-  || fail "stripping std from schema/lmtorch.dsl.json does not give schema/lmtorch.host.json"
-ok "schema/lmtorch.dsl.json = schema/lmtorch.host.json + lmcode std (and back)"
+  || fail "host schema contains signatures from the built-in lmcode std catalog"
+ok "schema/lmtorch.dsl.json is host-only; lmcode std is supplied by the compiler and registry"
 printf 'p = _lmcode_ schema="%s";\nwhile (false) {}\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
 "$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v5 while loop against the schema"
 [ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 5 ] || fail "$LMSCRIPT does not emit bytecode v5"

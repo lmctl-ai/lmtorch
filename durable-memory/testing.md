@@ -4,7 +4,7 @@
 (Git Bash: `.exe` binaries, drive-letter paths for anything a native program reads; see native-build.md). In order:
 
 1. `scripts/sync-sdk.sh --verify` (every vendored lmcode-cpp file equals `sdk.lock`); `schema/lmtorch.dsl.json` equals
-   `schema/lmtorch.host.json` merged with the std schema (and strips back to it); the compiler emits bytecode v5; a std
+   `schema/lmtorch.host.json` byte for byte; the compiler emits bytecode v5; a std
    block (strings, math, lists, files, `Bundle.keys().join`) runs.
 2. Schema gates: `--dsl-schema --json` equals `schema/lmtorch.dsl.json` byte for byte; `--dsl-signatures` equals
    `lmscript --dsl-signatures`; the `--dsl-schema` summary lists every member; lmapi `--schema` equals `cli.schema.dev.json`.

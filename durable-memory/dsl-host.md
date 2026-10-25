@@ -1,8 +1,8 @@
 # The `_lmcode_` host (lmtorch --dsl)
 
-What it is: lmtorch embeds the lmcode-cpp VM (formerly cpp-dsl-sdk; `third_party/dslvm/dslvm.hpp` plus `stdlib/*.hpp`,
-the std schema and `scripts/merge-std.py`, all pinned per file by `sdk.lock`, same pin as lmhtml) and binds
-`schema/lmtorch.dsl.json` (generated: `schema/lmtorch.host.json` + std via `scripts/merge-std.py`) to libtorch in `src/dsl_host.cpp`. lmscript compiles `_lmcode_` blocks
+What it is: lmtorch embeds the lmcode-cpp VM (`third_party/dslvm/dslvm.hpp` plus `stdlib/*.hpp`,
+the std schema and `scripts/merge-std.py`, all pinned per file by `sdk.lock`) and binds the host-only
+`schema/lmtorch.dsl.json` to libtorch in `src/dsl_host.cpp`. lmscript compiles `_lmcode_` blocks
 against that schema (`savedsl`); `lmtorch --dsl A.dslb [B.dslb ...]` runs them. API reference: `docs/dsl-api.md`.
 Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--dsl-signatures` parity, one JSON line).
 
@@ -10,11 +10,10 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--ds
 
 - **lmcode std (2026-10-24):** the default `dslvm::Registry` installs the 72-signature lmcode std (strings, math,
   collections, files). lmtorch registers none of it and dropped its own `StrList` (`Bundle.keys()` returns the std one via
-  `registry.std_collections().make_str_list`, valid for the run). Edit `schema/lmtorch.host.json`, then regenerate
-  `schema/lmtorch.dsl.json` with `python3 scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json
-  schema/lmtorch.host.json schema/lmtorch.dsl.json` (test.sh fails when it is stale). The compiler (lmscript 0.2.419)
-  does not inject std yet, so the merged schema is what `--dsl-schema --json` prints. Blocks are spelled `_lmcode_`
-  (lmscript accepts both spellings since 0.2.419; the bytecode is the same).
+  `registry.std_collections().make_str_list`, valid for the run). `schema/lmtorch.host.json` is the source for
+  `schema/lmtorch.dsl.json`; keep the two byte-identical. The embedded schema and bytecode hash now contain only the host
+  declarations. lmscript 0.2.420 or later and the default runtime registry provide std automatically. `_lmcode_` is the
+  current spelling; `_dsl_` remains accepted as an alias.
 
 - **Host flag standard (lmscript R42, 2026-10-20):** `--dsl-schema [--json]` (DSL schema), `--cli-schema [--json]` (lmapi
   document; `--schema` stays as the lmapi protocol name), `--dsl-signatures`. lmscript's `_lmcode_ cli="lmtorch"` runs

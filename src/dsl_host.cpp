@@ -1,5 +1,5 @@
-// The `_lmcode_` bytecode host: binds schema/lmtorch.dsl.json (embedded byte for byte: schema/lmtorch.host.json merged with
-// the lmcode std schema) to libtorch through the vendored lmcode-cpp VM, whose default Registry installs the std catalog.
+// The `_lmcode_` bytecode host: binds the host-only schema/lmtorch.dsl.json (embedded byte for byte) to libtorch through
+// the vendored lmcode-cpp VM, whose default Registry installs the std catalog.
 // One process runs one or more chunks against one Torch/Out context; stdout carries exactly one JSON line.
 #include "lmtorch/dsl_host.hpp"
 #include "lmtorch/safetensors.hpp"

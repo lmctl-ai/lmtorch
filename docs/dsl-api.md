@@ -1,10 +1,11 @@
 # lmtorch `_lmcode_` API
 
-`schema/lmtorch.dsl.json` is the contract (dsl.schema 2, bytecode v5): lmtorch's own declarations (`schema/lmtorch.host.json`)
-merged with the lmcode std schema, which the lmcode-cpp VM implements (see [lmcode std](#lmcode-std)). A block may use
-`_dsl_` or `_lmcode_`; both compile to the same bytecode. `lmtorch --dsl-schema` prints this list grouped by
-type; `lmtorch --dsl-schema --json` prints the exact schema bytes the compiler needs, so a block can name the binary
-instead of a schema file: `prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.419)
+`schema/lmtorch.dsl.json` is the host contract (dsl.schema 2, bytecode v5), identical to lmtorch's declarations in
+`schema/lmtorch.host.json`. The lmcode-cpp VM's default registry and lmscript 0.2.420 or later supply the built-in std
+schema automatically (see [lmcode std](#lmcode-std)); it does not need duplicate host declarations. `_lmcode_` is the
+current block spelling; `_dsl_` remains a compatible alias and both compile to the same bytecode. `lmtorch --dsl-schema`
+prints this list grouped by type; `lmtorch --dsl-schema --json` prints the exact host schema bytes, so a block can name the binary
+instead of a schema file: `prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.420)
 compiles against the binary's own schema, which can never drift from the binary that runs it. `install=` downloads the
 newest release (`@latest`; pin `@vX.Y.Z` for reproducibility, verified against GitHub's SHA-256 digest) when lmtorch is not on PATH, and `dsl_cli(prog)` is the argv prefix of
 the binary the block was compiled against. `lmtorch --cli-schema` prints the

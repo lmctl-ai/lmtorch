@@ -9,7 +9,8 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 ## State
 - One C++17 binary, two front ends. lmapi: the original 12 operations (lmcpp, `--schema` byte-identical to
   `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --dsl prog.dslb` runs lmscript `_lmcode_` bytecode (v5,
-  lmcode-cpp VM pinned in `sdk.lock`) against `schema/lmtorch.dsl.json`: 288 signatures (216 lmtorch + 72 lmcode std) (`docs/dsl-api.md`, decisions in
+  lmcode-cpp VM pinned in `sdk.lock`) against host-only `schema/lmtorch.dsl.json`: 216 lmtorch signatures; the registry and compiler
+  add the 72 built-in lmcode std signatures (`docs/dsl-api.md`, decisions in
   dsl-host.md).
 - Build: `scripts/build-libtorch.sh` (static CPU-only libtorch 2.9.1 from source) then `scripts/build-native.sh`, on
   Linux (GCC), macOS (AppleClang) and Windows (MSVC from Git Bash). Release form: libtorch and the C++ runtime static,
@@ -58,9 +59,9 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 - Sibling hosts (2026-10-21): lmcad v0.1.3 and lmhtml v0.7.3 add `--version` (same CMake-VERSION source and release-job
   tag guard), so `install="github:lmctl-ai/{lmcad,lmhtml}@latest"` works; verified from an empty cache on linux-arm64.
 
-- lmcode (2026-10-24, v0.5.0): SDK is lmctl-ai/lmcode-cpp (renamed from cpp-dsl-sdk) at 53b9bdf; its registry
-  installs the 72-signature lmcode std, lmtorch's own StrList is gone (Bundle.keys() returns the std one), the schema is
-  generated from schema/lmtorch.host.json + std, and every block is spelled `_lmcode_` (lmscript >= 0.2.419).
+- lmcode (2026-10-24, v0.5.0): SDK is lmctl-ai/lmcode-cpp at the commit in `sdk.lock`; its registry installs the
+  72-signature lmcode std, lmtorch's own StrList is gone (Bundle.keys() returns the std one), the embedded schema contains
+  only host declarations, and every block uses `_lmcode_` (lmscript >= 0.2.420; `_dsl_` remains accepted).
 
 ## Pending
 - No BLAS (portable GEMM; no linalg) on any OS. Release binaries are not code-signed or notarized.
