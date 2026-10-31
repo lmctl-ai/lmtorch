@@ -91,3 +91,5 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled components and 
 ## License
 
 [MIT](LICENSE). Maintained by Lattice Systems LLC.
+
+The native host runs bytecode with `--lmcode FILE`; discovery uses `--lmcode-schema --json` and `--lmcode-signatures`. Retired host flag spellings are rejected. Internal DSLB magic and `.dslb` artifacts keep their names.

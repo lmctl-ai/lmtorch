@@ -5,7 +5,7 @@ FAILED = [];
 COUNT = [];
 
 fn run_files(files) {
-  r = system ${BIN} --dsl ${files};
+  r = system ${BIN} --lmcode ${files};
   return {code: r.code, line: trim(r.stdout) == "" ? {} : json_parse(trim(r.stdout))};
 }
 fn expect(name, r, code, phase, err, fragment) {
@@ -57,7 +57,7 @@ expect("two good files run in order", {code: two.code == 0 ? 3 : 0, line: {phase
 if (!file_exists("side-effect.txt") || !two.line.result.ran) { push(FAILED, "two files"); println("FAIL: both files should have run"); }
 
 # ---- usage errors: exit 2 and no result line
-for (args in [["--dsl"], ["--dsl", "--x"], ["--dsl-schema", "--bad"], ["--dsl-signatures", "extra"], ["--dsl", ""]]) {
+for (args in [["--lmcode"], ["--lmcode", "--x"], ["--lmcode-schema", "--bad"], ["--lmcode-signatures", "extra"], ["--lmcode", ""]]) {
   push(COUNT, "usage");
   u = system ${BIN} ${args};
   if (u.code != 2 || trim(u.stdout) != "") { push(FAILED, "usage"); println(f"FAIL usage {json_stringify(args)}: exit {u.code}"); }

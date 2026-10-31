@@ -9,11 +9,11 @@
 #include <io.h>
 #endif
 // Host flag standard (R42 in lmscript's dsl-bytecode requirements): --cli-schema prints the lmapi cli.schema.v1 document
-// (also reachable as the lmapi protocol's --schema), --dsl-schema prints the _lmcode_ schema, --version prints
+// (also reachable as the lmapi protocol's --schema), --lmcode-schema prints the _lmcode_ schema, --version prints
 // `lmtorch MAJOR.MINOR.PATCH` (lmscript's install=...@latest compares it with the release tag).
 int main(int argc,char**argv){
 #ifdef _WIN32
-  // The CRT's text mode would turn \n into \r\n: --dsl-schema --json and --schema are byte-exact, results are JSON lines.
+  // The CRT's text mode would turn \n into \r\n: --lmcode-schema --json and --schema are byte-exact, results are JSON lines.
   _setmode(_fileno(stdout),_O_BINARY);_setmode(_fileno(stderr),_O_BINARY);_setmode(_fileno(stdin),_O_BINARY);
 #endif
   if(argc==2&&std::string(argv[1])=="--version"){std::cout<<"lmtorch " LMTORCH_VERSION "\n";return 0;}
@@ -22,7 +22,7 @@ int main(int argc,char**argv){
   static char schema_flag[]="--schema";
   if(argc>1&&std::string(argv[1])=="--cli-schema"){
     args[1]=schema_flag;
-    if(argc==3&&std::string(argv[2])=="--json")args.resize(2);  // the document is JSON either way (symmetry with --dsl-schema --json)
+    if(argc==3&&std::string(argv[2])=="--json")args.resize(2);  // the document is JSON either way (symmetry with --lmcode-schema --json)
   }
   bool meta=argc>1&&(std::string(args[1])=="--schema"||std::string(args[1])=="--list"||std::string(args[1])=="--help"||std::string(args[1])=="--explain");
   if(!meta){at::set_num_threads(2);at::set_num_interop_threads(1);}

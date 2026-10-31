@@ -51,7 +51,7 @@ executables: linux-x64 222 MB, linux-arm64 185 MB, macos-x64 224 MB, macos-arm64
   Archives are `*.lib`; link with `/WHOLEARCHIVE:` per whole library. Gate: `dumpbin -dependents` (`-` not `/`, which
   Git Bash would rewrite into a path) must list only Windows system DLLs, no vcruntime/msvcp/ucrtbase/api-ms-win-crt.
   nlohmann-json from vcpkg via `CMAKE_PREFIX_PATH`. `.gitattributes` forces LF (sdk.lock hash, byte-identical schemas).
-  Stdout/stderr/stdin are switched to binary mode in main (CRLF would break `--dsl-schema --json` and JSON lines).
+  Stdout/stderr/stdin are switched to binary mode in main (CRLF would break `--lmcode-schema --json` and JSON lines).
   File writes use CreateFileW(CREATE_NEW) + FlushFileBuffers + MoveFileExW (see dsl-host.md).
 - test.sh under Git Bash: binaries are `*.exe`; anything a native program reads from a file, argument it builds or
   environment variable gets the drive-letter form (`npath`); the oracles get npm's `lmscript.cmd`; the venv python is
@@ -76,7 +76,7 @@ executables: linux-x64 222 MB, linux-arm64 185 MB, macos-x64 224 MB, macos-arm64
   (configure 23:56, install 01:29) while other agents loaded the machine to 10-40. Peak memory stayed below ~10 GiB.
 - Installed archives: libtorch_cpu.a 398 MB, then onnx, protobuf, protoc (not linked), sleef, fmt, cpuinfo, c10, torch.
 - lmtorch static link: 48 s. Executable 184,599,624 bytes unstripped (122,127,864 stripped), `file`: statically linked,
-  `ldd`: not a dynamic executable. `--dsl-schema` starts in 0.21 s with 94 MB max RSS.
+  `ldd`: not a dynamic executable. `--lmcode-schema` starts in 0.21 s with 94 MB max RSS.
 - Static vs dev (wheel) build: classify-moons-dsl 1.33 s vs 1.90 s, cnn-bars-dsl 0.74 s vs 0.94 s (startup dominates).
 - Numerics: the static build's BLAS-free GEMM differs from the wheel's kernels in the last float32 bits (lmapi mlp-train
   first loss 0.886623740 static vs 0.886623621 wheel); the PyTorch oracles (tolerance 1e-5; RNG/init exact) pass on both.

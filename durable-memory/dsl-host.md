@@ -1,10 +1,10 @@
-# The `_lmcode_` host (lmtorch --dsl)
+# The `_lmcode_` host (lmtorch --lmcode)
 
 What it is: lmtorch embeds the lmcode-cpp VM (`third_party/dslvm/dslvm.hpp` plus `stdlib/*.hpp`,
 the std schema and `scripts/merge-std.py`, all pinned per file by `sdk.lock`) and binds the host-only
 `schema/lmtorch.dsl.json` to libtorch in `src/dsl_host.cpp`. lmscript compiles `_lmcode_` blocks
-against that schema (`savedsl`); `lmtorch --dsl A.dslb [B.dslb ...]` runs them. API reference: `docs/dsl-api.md`.
-Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--dsl-signatures` parity, one JSON line).
+against that schema (`savedsl`); `lmtorch --lmcode A.dslb [B.dslb ...]` runs them. API reference: `docs/dsl-api.md`.
+Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--lmcode-signatures` parity, one JSON line).
 
 ## Decisions (2026-10-20)
 
@@ -15,13 +15,13 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--ds
   declarations. lmscript 0.2.420 or later and the default runtime registry provide std automatically. `_lmcode_` is the
   current spelling; `_dsl_` remains accepted as an alias.
 
-- **Host flag standard (lmscript R42, 2026-10-20):** `--dsl-schema [--json]` (DSL schema), `--cli-schema [--json]` (lmapi
-  document; `--schema` stays as the lmapi protocol name), `--dsl-signatures`. lmscript's `_lmcode_ cli="lmtorch"` runs
-  `lmtorch --dsl-schema --json` at compile time, so scripts need no schema file; examples keep `schema=` until an lmscript
+- **Host flag standard (lmscript R42, 2026-10-20):** `--lmcode-schema [--json]` (DSL schema), `--cli-schema [--json]` (lmapi
+  document; `--schema` stays as the lmapi protocol name), `--lmcode-signatures`. lmscript's `_lmcode_ cli="lmtorch"` runs
+  `lmtorch --lmcode-schema --json` at compile time, so scripts need no schema file; examples keep `schema=` until an lmscript
   release ships R42 (test.sh runs a cli= smoke test whenever the compiler supports it).
-- **One binary, two front ends.** `main.cpp` sends `--dsl`, `--dsl-schema`, `--dsl-signatures` to the DSL host; everything
+- **One binary, two front ends.** `main.cpp` sends `--lmcode`, `--lmcode-schema`, `--lmcode-signatures` to the DSL host; everything
   else is the unchanged lmcpp/lmapi CLI (`--schema` stays byte-identical to `cli.schema.dev.json`, the acceptance gate
-  from status.md). The DSL schema flag is `--dsl-schema` because `--schema` already belongs to lmapi.
+  from status.md). The DSL schema flag is `--lmcode-schema` because `--schema` already belongs to lmapi.
 - **Context:** `torch` (Torch) for everything tensor-shaped and `out` (Out) for the result object. No free functions:
   reads like PyTorch (`torch.zeros`, `torch.manual_seed`).
 - **Schema 2 operators** map `+ - * neg r+ r- r*` to Tensor methods; `/` has no schema-2 operator key, so `div()`.
@@ -68,3 +68,7 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--ds
 - `Tensor.set` writes in place through views (a `slice` shares storage), and refuses non-contiguous tensors.
 - A DSL rebuild of `src/dsl_host.cpp` takes several minutes on the shared 4-core host (torch/torch.h); other teams' builds
   often load the machine to 10-40.
+
+## Hard host flag cutover
+
+The selector in main and the lmcode parser expose only the lmcode flag family; retired host spellings are rejected. SDK20325f7 is synchronized through scripts/sync-sdk.sh and adds the current206-signature catalog, superseding the historical72-signature note above. Internal DSLB and .dslb names remain. test.sh checks exact discovery and refusal before file effects, then realv6 execution. Local qualification uses the documented development build with CPU PyTorch2.9.1 and both numerical oracle suites. This does not qualify static release linkage.

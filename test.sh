@@ -3,7 +3,7 @@
 # API and refusal suites, every _lmcode_ example, the lmapi recipes, and (when a Python with torch is available) the PyTorch
 # oracles for both front ends.
 #   LMTORCH_BIN       binary under test (default build/bin/lmtorch, else build-dev/bin/lmtorch)
-#   LMSCRIPT_BIN       compiler (default lmscript on PATH; must emit DSL bytecode v5)
+#   LMSCRIPT_BIN       compiler (default lmscript on PATH; must emit lmcode bytecode v6)
 #   ORACLE_PYTHON      python with torch + safetensors (default ~/.cache/lmtorch/oracle-venv/bin/python when present)
 #   LMTORCH_REQUIRE_RELEASE=1  fail unless only system libraries are dynamically linked (release gate): glibc's own on
 #                              Linux, libc++ and libSystem on macOS, Windows system DLLs (no VC++ runtime) on Windows
@@ -50,14 +50,14 @@ LMSCRIPT_PY="$LMSCRIPT"
 
 # Smoke run first, so a binary that cannot start (a missing DLL, a crash in a static initializer) is reported with its
 # exit status instead of as an empty schema.
-set +e; "$BIN" --dsl-schema --json > "$WORK/smoke.json" 2> "$WORK/smoke.err"; code=$?; set -e
+set +e; "$BIN" --lmcode-schema --json > "$WORK/smoke.json" 2> "$WORK/smoke.err"; code=$?; set -e
 if [ "$code" != 0 ] || [ ! -s "$WORK/smoke.json" ]; then
-  echo "# $BIN --dsl-schema --json: exit $code, $(wc -c < "$WORK/smoke.json" | tr -d ' ') bytes; stderr: $(head -c 2000 "$WORK/smoke.err")" >&2
+  echo "# $BIN --lmcode-schema --json: exit $code, $(wc -c < "$WORK/smoke.json" | tr -d ' ') bytes; stderr: $(head -c 2000 "$WORK/smoke.err")" >&2
   if [ "$OS" = windows ] && command -v dumpbin >/dev/null 2>&1; then dumpbin -nologo -dependents "$BIN" >&2 || true; fi
   # Windows: the stack at the fault, from the Debugging Tools' cdb with the PDB the release link writes next to the exe.
   cdb="/c/Program Files (x86)/Windows Kits/10/Debuggers/x64/cdb.exe"
   if [ "$OS" = windows ] && [ -x "$cdb" ]; then
-    "$cdb" -g -G -y "$(dirname "$BIN")" -c ".lines -d; .ecxr; kn 60; q" "$BIN" --dsl-schema --json 2>&1 | tail -90 >&2 || true
+    "$cdb" -g -G -y "$(dirname "$BIN")" -c ".lines -d; .ecxr; kn 60; q" "$BIN" --lmcode-schema --json 2>&1 | tail -90 >&2 || true
   fi
   fail "$BIN does not start (exit $code)"
 fi
@@ -67,30 +67,31 @@ ok "vendored lmcode-cpp VM, std headers, std schema and merge helper match sdk.l
 # (Windows: python3 may be the Microsoft Store stub, so python comes first there.)
 if [ "$OS" = windows ]; then SYS_PYTHON="$(command -v python || command -v python3 || true)"; else SYS_PYTHON="$(command -v python3 || command -v python || true)"; fi
 [ -n "$SYS_PYTHON" ] || fail "python3 not found (needed to check the std schema merge)"
+"$SYS_PYTHON" tests/check-host-flags.py schema/lmtorch.dsl.json "$BIN" || fail "hard host flag cutover"
 cmp schema/lmtorch.host.json schema/lmtorch.dsl.json || fail "schema/lmtorch.dsl.json is stale: copy the host-only schema"
 "$SYS_PYTHON" scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json --host-only schema/lmtorch.dsl.json - | "$SYS_PYTHON" -c 'import json,sys; d=lambda o: {k: v for k, v in o.items() if v != {}}; sys.exit(d(json.load(sys.stdin)) != d(json.load(open(sys.argv[1]))))' schema/lmtorch.host.json \
   || fail "host schema contains signatures from the built-in lmcode std catalog"
 ok "schema/lmtorch.dsl.json is host-only; lmcode std is supplied by the compiler and registry"
 printf 'p = _lmcode_ schema="%s";\nwhile (false) {}\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
-"$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v5 while loop against the schema"
-[ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 5 ] || fail "$LMSCRIPT does not emit bytecode v5"
-ok "compiler $("$LMSCRIPT" --version) emits DSL bytecode v5"
+"$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v6 while loop against the schema"
+[ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 6 ] || fail "$LMSCRIPT does not emit bytecode v6"
+ok "compiler $("$LMSCRIPT" --version) emits lmcode bytecode v6"
 
-"$BIN" --dsl-schema --json | cmp - schema/lmtorch.dsl.json || fail "embedded DSL schema differs from schema/lmtorch.dsl.json"
-ok "--dsl-schema --json prints the schema bytes exactly"
-diff -u <("$LMSCRIPT" --dsl-signatures schema/lmtorch.dsl.json) <("$BIN" --dsl-signatures) || fail "registry and schema signatures differ"
-ok "registry signatures equal the compiler's ($("$BIN" --dsl-signatures | wc -l | tr -d ' ') signatures)"
-"$BIN" --dsl-schema > "$WORK/summary.txt"
+"$BIN" --lmcode-schema --json | cmp - schema/lmtorch.dsl.json || fail "embedded DSL schema differs from schema/lmtorch.dsl.json"
+ok "--lmcode-schema --json prints the schema bytes exactly"
+diff -u <("$LMSCRIPT" --lmcode-signatures schema/lmtorch.dsl.json) <("$BIN" --lmcode-signatures) || fail "registry and schema signatures differ"
+ok "registry signatures equal the compiler's ($("$BIN" --lmcode-signatures | wc -l | tr -d ' ') signatures)"
+"$BIN" --lmcode-schema > "$WORK/summary.txt"
 missing=0
 while read -r sig; do
   case "$sig" in method\ *) member="${sig#method *.}"; grep -qF "  $member" "$WORK/summary.txt" || missing=$((missing + 1));; esac
-done < <("$BIN" --dsl-signatures)
-[ "$missing" = 0 ] || fail "--dsl-schema summary is missing $missing members"
-ok "--dsl-schema summary lists every member"
+done < <("$BIN" --lmcode-signatures)
+[ "$missing" = 0 ] || fail "--lmcode-schema summary is missing $missing members"
+ok "--lmcode-schema summary lists every member"
 "$BIN" --schema | cmp - cli.schema.dev.json || fail "lmapi --schema differs from cli.schema.dev.json"
 ok "lmapi --schema is byte-identical to cli.schema.dev.json"
 for flags in "--cli-schema" "--cli-schema --json"; do "$BIN" $flags | cmp - cli.schema.dev.json || fail "$flags differs from cli.schema.dev.json"; done
-ok "host flag standard: --cli-schema [--json] prints the lmapi document, --dsl-schema --json the DSL schema"
+ok "host flag standard: --cli-schema [--json] prints the lmapi document, --lmcode-schema --json the DSL schema"
 want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)"
 [ "$("$BIN" --version)" = "$want" ] || fail "--version: '$("$BIN" --version)' (want '$want')"
 set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
@@ -100,7 +101,7 @@ ok "--version prints '$want' (host flag standard; lmscript install=...@latest co
 printf 'p = _lmcode_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _lmcode_\nsavedsl(p, "%s");\n' "$BIN" "$WORK/cli.dslb" > "$WORK/cli.lms"
 if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then
   "$LMSCRIPT" "$WORK/cli.lms" >/dev/null || fail "compiling with cli=$BIN"
-  (cd "$WORK" && "$BIN" --dsl cli.dslb) | grep -q '"v":3.0' || fail "running a cli= compiled program"
+  (cd "$WORK" && "$BIN" --lmcode cli.dslb) | grep -q '"v":3.0' || fail "running a cli= compiled program"
   ok "_lmcode_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
 else
   echo "# skipped: _lmcode_ cli= (this lmscript predates lmscript R42)"
@@ -125,7 +126,7 @@ end _lmcode_
 savedsl(p, "$WORK/std.dslb");
 LMS
 "$LMSCRIPT" "$WORK/std.lms" >/dev/null || fail "compiling a block that uses lmcode std"
-(cd "$WORK" && "$BIN" --dsl std.dslb) > "$WORK/std.out" || fail "running lmcode std: $(cat "$WORK/std.out")"
+(cd "$WORK" && "$BIN" --lmcode std.dslb) > "$WORK/std.out" || fail "running lmcode std: $(cat "$WORK/std.out")"
 for want in '"keys":"b+w"' '"has_w":true' '"upper":"OK"' '"root":4.0' '"xs":6' '"parts":3' '"file":"ababtrue"'; do
   grep -qF "$want" "$WORK/std.out" || fail "lmcode std: missing $want in $(cat "$WORK/std.out")"
 done
@@ -168,7 +169,7 @@ if [ -x "$UNIT" ]; then (cd "$WORK" && "$UNIT") || fail "C++ safetensors unit te
 
 mkdir -p "$WORK/api/dsl-api-work"
 "$LMSCRIPT" tests/dsl/api.lms "$WORK/api/api.dslb" dsl-api-work >/dev/null
-(cd "$WORK/api" && "$BIN" --dsl api.dslb > result.json) || fail "DSL API suite: $(cat "$WORK/api/result.json")"
+(cd "$WORK/api" && "$BIN" --lmcode api.dslb > result.json) || fail "DSL API suite: $(cat "$WORK/api/result.json")"
 grep -q '"series":\[1,2.5\]' "$WORK/api/result.json" || fail "DSL API suite result: $(cat "$WORK/api/result.json")"
 ok "DSL API suite ($(grep -c 'out.check' tests/dsl/api.lms) checks)"
 mkdir -p "$WORK/negative"
@@ -177,7 +178,7 @@ ok "$(tail -1 "$WORK/negative.log")"
 # The two front ends share the safetensors reader: a BOOL artifact written by the DSL is a coded lmapi refusal.
 printf 'p = _lmcode_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
 "$LMSCRIPT" "$WORK/bools.lms" >/dev/null
-(cd "$WORK" && "$BIN" --dsl bools.dslb >/dev/null) || fail "writing a BOOL artifact"
+(cd "$WORK" && "$BIN" --lmcode bools.dslb >/dev/null) || fail "writing a BOOL artifact"
 set +e; (cd "$WORK" && "$BIN" tensor_inspect --input bools.safetensors#tensor) > "$WORK/bools.json"; code=$?; set -e
 [ "$code" = 2 ] && grep -q '"tool_code": "INVALID_DTYPE"' "$WORK/bools.json" || fail "lmapi on a BOOL artifact: exit $code $(cat "$WORK/bools.json")"
 ok "a DSL-written BOOL artifact is a coded lmapi refusal (INVALID_DTYPE)"

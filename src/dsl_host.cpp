@@ -929,7 +929,7 @@ void register_torch(dslvm::Registry& r, Host& h) {
 void print_summary(dslvm::Registry& reg) {
   std::vector<std::string> order, functions;
   std::map<std::string, std::vector<std::string>> members;
-  std::cout << "lmtorch DSL host: compile with lmscript against `lmtorch --dsl-schema --json`, run with `lmtorch --dsl FILE.dslb`\n";
+  std::cout << "lmtorch DSL host: compile with lmscript against `lmtorch --lmcode-schema --json`, run with `lmtorch --lmcode FILE.dslb`\n";
   std::cout << "enum DType: F32, F64, I64, BOOL\n";
   for (const auto& sig : reg.signatures()) {
     if (sig.rfind("context ", 0) == 0) std::cout << sig << "\n";
@@ -952,16 +952,16 @@ void print_summary(dslvm::Registry& reg) {
 bool selects_dsl(int argc, char** argv) {
   if (argc < 2) return false;
   std::string a = argv[1];
-  return a == "--dsl" || a == "--dsl-schema" || a == "--dsl-signatures";
+  return a == "--lmcode" || a == "--lmcode-schema" || a == "--lmcode-signatures";
 }
 
 int run(int argc, char** argv) {
-  const std::string usage = "usage: lmtorch --dsl-schema [--json] | --dsl-signatures | --dsl FILE.dslb [FILE.dslb ...]\n";
+  const std::string usage = "usage: lmtorch --lmcode-schema [--json] | --lmcode-signatures | --lmcode FILE.dslb [FILE.dslb ...]\n";
   Host host;
   dslvm::Registry reg;
   register_torch(reg, host);
   std::string first = argv[1];
-  if (first == "--dsl-schema") {
+  if (first == "--lmcode-schema") {
     if (argc == 2) { print_summary(reg); return std::cout ? 0 : 4; }
     if (argc == 3 && std::string(argv[2]) == "--json") {
       std::cout.write(reinterpret_cast<const char*>(embedded_dsl_schema), std::streamsize(embedded_dsl_schema_size));
@@ -970,12 +970,12 @@ int run(int argc, char** argv) {
     std::cerr << usage;
     return 2;
   }
-  if (first == "--dsl-signatures") {
+  if (first == "--lmcode-signatures") {
     if (argc != 2) { std::cerr << usage; return 2; }
     for (const auto& s : reg.signatures()) std::cout << s << "\n";
     return 0;
   }
-  if (first != "--dsl" || argc < 3) { std::cerr << usage; return 2; }
+  if (first != "--lmcode" || argc < 3) { std::cerr << usage; return 2; }
   for (int i = 2; i < argc; ++i) {
     std::string a = argv[i];
     if (a.empty() || a.rfind("--", 0) == 0) { std::cerr << usage; return 2; }

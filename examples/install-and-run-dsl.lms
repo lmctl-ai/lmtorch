@@ -1,10 +1,10 @@
 # The zero-setup way to use lmtorch from lmscript: no schema file and no manual install.
-#   - cli="lmtorch" makes lmscript ask the lmtorch binary for its schema (`lmtorch --dsl-schema --json`) and compile against
+#   - cli="lmtorch" makes lmscript ask the lmtorch binary for its schema (`lmtorch --lmcode-schema --json`) and compile against
 #     exactly those bytes, so the bytecode is bound to the binary that will run it;
 #   - install="github:lmctl-ai/lmtorch@latest" says where lmtorch comes from when it is not on PATH: lmscript downloads the
 #     release asset lmtorch-OS-ARCH[.exe] once into its tool cache, verified against the SHA-256 digest GitHub reports, and
 #     uses it from then on;
-#   - dsl_cli(p) is the argv prefix of that exact binary, so `system ${dsl_cli(p)} --dsl FILE` runs it.
+#   - dsl_cli(p) is the argv prefix of that exact binary, so `system ${dsl_cli(p)} --lmcode FILE` runs it.
 # The program itself: a matrix product, an autograd gradient and a two-parameter least-squares fit, with known answers.
 # Run: lmscript examples/install-and-run-dsl.lms   (works on a machine with only Node.js and lmscript installed)
 
@@ -32,7 +32,7 @@ end _lmcode_
 
 file = "install-and-run.dslb";
 savedsl(p, file);
-r = system ${dsl_cli(p)} --dsl ${file};
+r = system ${dsl_cli(p)} --lmcode ${file};
 delete_file(file);
 if (r.code != 0) {
   println(f"lmtorch exit {r.code}: {trim(r.stdout)} {trim(r.stderr)}");

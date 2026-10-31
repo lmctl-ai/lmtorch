@@ -8,7 +8,7 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 
 ## State
 - One C++17 binary, two front ends. lmapi: the original 12 operations (lmcpp, `--schema` byte-identical to
-  `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --dsl prog.dslb` runs lmscript `_lmcode_` bytecode (v5,
+  `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --lmcode prog.dslb` runs lmscript `_lmcode_` bytecode (v5,
   lmcode-cpp VM pinned in `sdk.lock`) against host-only `schema/lmtorch.dsl.json`: 216 lmtorch signatures; the registry and compiler
   add the 72 built-in lmcode std signatures (`docs/dsl-api.md`, decisions in
   dsl-host.md).
@@ -37,19 +37,19 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
   the tag differs from `lmtorch --version` (CMake project VERSION): bump it before tagging.
 - Released: v0.4.0 (2026-10-21, tag run 39559055428): 15 assets, `lmtorch-{linux-x64,linux-arm64,macos-arm64,macos-x64}`
   + `.tar.gz` + `.sha256` and `lmtorch-windows-x64.exe` + `.zip` + `.sha256` (stripped sizes 147/123/105/144 MB, Windows
-  105 MB). Smoke-tested on aarch64: checksums OK, `--dsl-schema --json` byte-identical, version string
+  105 MB). Smoke-tested on aarch64: checksums OK, `--lmcode-schema --json` byte-identical, version string
   `lmtorch 0.4.0 (libtorch 2.9.1, CPU)`, checkpoint-resume-dsl (lmscript 0.2.359, release binary first on PATH, nothing
   downloaded) prints `checkpoints bit-identical: true`. macOS and Windows assets are CI-tested only (no local hardware).
 - Earlier: v0.3.0 (2026-10-20, run 39447192609): `lmtorch-linux-{x64,arm64}` (147 MB / 123 MB stripped), `.tar.gz`,
-  `.sha256`. Smoke-tested on aarch64: checksum OK, `--dsl-schema --json` byte-identical, checkpoint-resume-dsl correct.
+  `.sha256`. Smoke-tested on aarch64: checksum OK, `--lmcode-schema --json` byte-identical, checkpoint-resume-dsl correct.
 - Bugs fixed (all with regression tests): see the commit history of 2026-10-20 and testing.md (ragged literals reading
   uninitialized memory, uncaught lmcpp::Error aborting the process, BOOL payload bytes, grad mode leaking across files,
   CSV byte-order marks, and several error messages).
 
 - `_lmcode_ cli="lmtorch"` (lmscript R42, lmctl-mono 0795e69f, 2026-10-20): the compiler takes the schema from
-  `lmtorch --dsl-schema --json`; lmtorch adds `--cli-schema`. lmscript 0.2.359 (npm) ships R42 + R43.
+  `lmtorch --lmcode-schema --json`; lmtorch adds `--cli-schema`. lmscript 0.2.359 (npm) ships R42 + R43.
 - Examples (2026-10-20): every `_lmcode_` block is `cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (R45, owner 2026-10-21); the helpers
-  run `system ${dsl_cli(prog)} --dsl ...` (lib/torchdsl.lms: `run(prog, files)`, `run_block(prog, path)`; LMTORCH_BIN no
+  run `system ${dsl_cli(prog)} --lmcode ...` (lib/torchdsl.lms: `run(prog, files)`, `run_block(prog, path)`; LMTORCH_BIN no
   longer selects the binary for examples, PATH does). New install-and-run-dsl.lms is the minimal form. test.sh puts the
   binary under test first on PATH, gives lmscript a private LMSCRIPT_TOOL_CACHE and fails if any example downloaded.
   lmapi recipes (and mlp-train-dsl's cross-check) import `github:lmctl-ai/lmtorch@latest lmtorch` (lmscript R44,

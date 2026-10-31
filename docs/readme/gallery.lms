@@ -15,12 +15,12 @@ out.check(grad.allclose(x.detach() * 2.0, 0.0, 0.0), "gradient must equal 2x");
 out.set("gradient", grad);
 end _lmcode_
 savedsl(sum_prog, "build/readme/sum.dslb");
-sum_run = system ${dsl_cli(sum_prog)} --dsl build/readme/sum.dslb;
+sum_run = system ${dsl_cli(sum_prog)} --lmcode build/readme/sum.dslb;
 if (sum_run.code != 0) { println(str(sum_run.stderr)); exit(sum_run.code); }
 SUM_TEXT = str(json_parse(sum_run.stdout).result.total);
 if (SUM_TEXT != "10") { println("unexpected sum result"); exit(1); }
 savedsl(grad_prog, "build/readme/gradient.dslb");
-grad_run = system ${dsl_cli(grad_prog)} --dsl build/readme/gradient.dslb;
+grad_run = system ${dsl_cli(grad_prog)} --lmcode build/readme/gradient.dslb;
 if (grad_run.code != 0) { println(str(grad_run.stderr)); exit(grad_run.code); }
 grad_result = json_parse(grad_run.stdout).result.gradient;
 G0 = num(grad_result[0]); G1 = num(grad_result[1]); G2 = num(grad_result[2]);
@@ -79,5 +79,5 @@ scene.render_png(${PNG}, 1000, 420, 1);
 end _lmcode_
 host = "build/readme-gallery-" + mode + "-" + theme + ".dslb";
 savedsl(p, host);
-r = system ${dsl_cli(p)} --dsl ${host};
+r = system ${dsl_cli(p)} --lmcode ${host};
 if (r.code != 0) { println(str(r.stderr)); exit(r.code); }

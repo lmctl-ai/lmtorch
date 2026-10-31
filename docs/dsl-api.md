@@ -1,16 +1,16 @@
 # lmtorch `_lmcode_` API
 
-`schema/lmtorch.dsl.json` is the host contract (dsl.schema 2, bytecode v5), identical to lmtorch's declarations in
+`schema/lmtorch.dsl.json` is the host contract (dsl.schema 2, bytecode v6), identical to lmtorch's declarations in
 `schema/lmtorch.host.json`. The lmcode-cpp VM's default registry and lmscript 0.2.420 or later supply the built-in std
 schema automatically (see [lmcode std](#lmcode-std)); it does not need duplicate host declarations. `_lmcode_` is the
-current block spelling; `_dsl_` remains a compatible alias and both compile to the same bytecode. `lmtorch --dsl-schema`
-prints this list grouped by type; `lmtorch --dsl-schema --json` prints the exact host schema bytes, so a block can name the binary
+current block spelling; `_dsl_` remains a compatible alias and both compile to the same bytecode. `lmtorch --lmcode-schema`
+prints this list grouped by type; `lmtorch --lmcode-schema --json` prints the exact host schema bytes, so a block can name the binary
 instead of a schema file: `prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.420)
 compiles against the binary's own schema, which can never drift from the binary that runs it. `install=` downloads the
 newest release (`@latest`; pin `@vX.Y.Z` for reproducibility, verified against GitHub's SHA-256 digest) when lmtorch is not on PATH, and `dsl_cli(prog)` is the argv prefix of
 the binary the block was compiled against. `lmtorch --cli-schema` prints the
-lmapi document (the same as lmapi's `--schema`); `lmtorch --dsl-signatures` prints
-the canonical signatures, which `test.sh` diffs against `lmscript --dsl-signatures schema/lmtorch.dsl.json`.
+lmapi document (the same as lmapi's `--schema`); `lmtorch --lmcode-signatures` prints
+the canonical signatures, which `test.sh` diffs against `lmscript --lmcode-signatures schema/lmtorch.dsl.json`.
 
 A program is an lmscript `_lmcode_` block compiled to bytecode and run by the native host:
 
@@ -22,7 +22,7 @@ loss.backward();
 out.set("loss", loss.item()).set("grad", x.grad());
 end _lmcode_
 savedsl(prog, "prog.dslb");
-r = system ${dsl_cli(prog)} --dsl prog.dslb;   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
+r = system ${dsl_cli(prog)} --lmcode prog.dslb;   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
 ```
 
 The language is the lmscript DSL (typed `let`, `if`/`else`, `switch`, `while`, `for (i in range(a, b))`, `for (x in list)`,
@@ -123,7 +123,7 @@ stdout carries exactly one line:
     {"ok": false, "phase": "run", "code": "RUN_HOST|RUN_ERROR", "message": "dsl line N:C: ...", "line": N, "column": C}   exit 3
     {"ok": false, "phase": "app", "code": "APP_FAIL", "message": ..., "line": N, ...}                                       exit 4
 
-Usage errors exit 2 with no result line; lmscript compile errors also exit 2. `--dsl A.dslb B.dslb ...` loads and verifies
+Usage errors exit 2 with no result line; lmscript compile errors also exit 2. `--lmcode A.dslb B.dslb ...` loads and verifies
 every file before running any, then runs them in order with one host state (the `out` object, the RNG, thread settings;
 autograd recording is reset to enabled at the start of each file);
 each file has its own DSL locals, so files hand tensors to each other through safetensors files.
@@ -138,7 +138,7 @@ Formats: safetensors (F32, F64, I64, BOOL; header ≤ 1 MiB, file ≤ 256 MiB), 
 
 ## lmcode std
 
-The lmcode-cpp VM registers the lmcode std catalog itself (72 signatures; lmtorch implements none of it), so every
+The lmcode-cpp VM registers the lmcode std catalog itself (206 signatures; lmtorch implements none of it), so every
 block can use, besides lmtorch's API:
 
 - strings: `str_len`, `str_upper`, `str_lower`, `str_trim`, `str_find`, `str_contains`, `str_starts_with`,
@@ -152,7 +152,7 @@ block can use, besides lmtorch's API:
   working directory). Unlike lmtorch's own loads and saves, std file calls are **not** confined to the working directory
   and std writes are not atomic (a failed one can leave a partial file).
 
-Std collections live for one run (one `lmtorch --dsl` file); the generated reference with exact semantics and errors is
+Std collections live for one run (one `lmtorch --lmcode` file); the generated reference with exact semantics and errors is
 [lmcode-cpp docs/std.md](https://github.com/lmctl-ai/lmcode-cpp/blob/main/docs/std.md).
 
 ## Handle lifetime

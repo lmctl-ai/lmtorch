@@ -7,20 +7,20 @@ Two ways to drive the same `lmtorch` binary from lmscript:
   safetensors files. The schema comes from the binary (`lmtorch --cli-schema --json`), the binary is lmtorch on PATH or
   else that release (installed exactly like `install=` below), and every call runs that exact binary.
 - **`_lmcode_` programs** (`*-dsl.lms`): a `_lmcode_` block is compiled by lmscript into bytecode (`savedsl`), and
-  `lmtorch --dsl FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
+  `lmtorch --lmcode FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
   memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).
 
 Every block is `_lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (lmscript >= 0.2.420): no schema file and
 no manual install.
 
-- `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --dsl-schema --json`) and compiles against exactly
+- `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --lmcode-schema --json`) and compiles against exactly
   those bytes, so the bytecode is bound to the binary that runs it.
 - `install=`: when `lmtorch` is not on PATH, lmscript downloads the release asset `lmtorch-OS-ARCH[.exe]` into its
   tool cache (`~/.cache/lmscript/tools`, or `LMSCRIPT_TOOL_CACHE`), verified against GitHub's SHA-256 digest. `@latest`
   (lmscript R45) is the newest release: each real run asks GitHub for it and replaces the cached binary when its
   `lmtorch --version` differs, so a new release needs no edit here. `--check` never uses the network, so on a fresh
   machine run the script once first. Pin a tag (`@v0.4.1`) for reproducible or offline use.
-- `dsl_cli(p)`: the argv prefix of that exact binary; the helpers run `system ${dsl_cli(p)} --dsl FILE...`.
+- `dsl_cli(p)`: the argv prefix of that exact binary; the helpers run `system ${dsl_cli(p)} --lmcode FILE...`.
 
 [install-and-run-dsl.lms](install-and-run-dsl.lms) is the minimal version of this. Run from the repository root; outputs
 go to `artifacts/<example>/` below the working directory, which lmtorch requires. To use a local build instead of the

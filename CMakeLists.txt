@@ -33,7 +33,7 @@ else()
   set(LMCPP_TARGET lmcpp::core)
 endif()
 
-# The DSL schema is compiled in byte for byte: `lmtorch --dsl-schema --json` prints it, and bytecode binds its SHA-256.
+# The DSL schema is compiled in byte for byte: `lmtorch --lmcode-schema --json` prints it, and bytecode binds its SHA-256.
 set(LMTORCH_DSL_SCHEMA "${CMAKE_CURRENT_SOURCE_DIR}/schema/lmtorch.dsl.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LMTORCH_DSL_SCHEMA}")
 file(READ "${LMTORCH_DSL_SCHEMA}" LMTORCH_SCHEMA_HEX HEX)

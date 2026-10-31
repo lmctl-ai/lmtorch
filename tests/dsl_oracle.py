@@ -1,4 +1,4 @@
-"""PyTorch oracle for the DSL host: the same seeds, layers, losses and optimizer steps computed by `lmtorch --dsl` and by
+"""PyTorch oracle for the DSL host: the same seeds, layers, losses and optimizer steps computed by `lmtorch --lmcode` and by
 Python torch must agree, and model files must load in both directions. Test-only: the shipped binary contains no Python.
 
 Usage: python dsl_oracle.py LMTORCH LMSCRIPT   (python needs torch and safetensors; cwd is irrelevant)
@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-oracle-", ignore_cleanup_errors
     with open("oracle.lms", "w") as f:
         f.write(PROGRAM.replace("${SCHEMA}", json.dumps(schema)))
     subprocess.run([lmscript, "oracle.lms"], check=True)
-    proc = subprocess.run([binary, "--dsl", "oracle.dslb"], capture_output=True, text=True)
+    proc = subprocess.run([binary, "--lmcode", "oracle.dslb"], capture_output=True, text=True)
     assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
     r = json.loads(proc.stdout)["result"]
 

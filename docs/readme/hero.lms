@@ -58,5 +58,5 @@ if (${mobile}) {
 end _lmcode_
 host = "build/readme-hero-" + layout + "-" + theme + ".dslb";
 savedsl(p, host);
-r = system ${dsl_cli(p)} --dsl ${host};
+r = system ${dsl_cli(p)} --lmcode ${host};
 if (r.code != 0) { println(str(r.stderr)); exit(r.code); }

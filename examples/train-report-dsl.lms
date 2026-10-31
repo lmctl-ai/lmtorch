@@ -107,7 +107,7 @@ heldout = [];
 for (v in res.heldout_pred) { push(heldout, sprintf("%.4f", v)); }
 targets = [];
 for (t in TEST_Y) { push(targets, sprintf("%.4f", t[0])); }
-md = sprintf("# Mini-model training report\n\nRun: `%s`  \nSteps: %d  \nLearning rate: %.4f  \nSeed: %d  \nEngine: %s, one `lmtorch --dsl` process\n\n## Metrics\n\n- First step loss: %.6f\n- Last step loss: %.6f\n- Minimum step loss: %.6f\n- Final training MSE: %.6f\n- Maximum absolute training error: %.6f\n- Training R-squared: %.6f\n- Held-out MSE: %.6f\n- Held-out predictions: %s\n- Held-out targets: %s\n\n## Loss curve\n\n`%s`\n\n%s\nFull curve: `losses.csv`; trained weights: `checkpoint.safetensors`.\n",
+md = sprintf("# Mini-model training report\n\nRun: `%s`  \nSteps: %d  \nLearning rate: %.4f  \nSeed: %d  \nEngine: %s, one `lmtorch --lmcode` process\n\n## Metrics\n\n- First step loss: %.6f\n- Last step loss: %.6f\n- Minimum step loss: %.6f\n- Final training MSE: %.6f\n- Maximum absolute training error: %.6f\n- Training R-squared: %.6f\n- Held-out MSE: %.6f\n- Held-out predictions: %s\n- Held-out targets: %s\n\n## Loss curve\n\n`%s`\n\n%s\nFull curve: `losses.csv`; trained weights: `checkpoint.safetensors`.\n",
   RUN, STEPS, LR, SEED, res.engine, res.first_loss, res.last_loss, res.min_loss, res.train_mse, res.max_abs_error, res.r2,
   res.heldout_mse, join(heldout, ", "), join(targets, ", "), sparkline(res.losses), rows);
 write_file(path_join(RUN, "train-report.md"), md);
