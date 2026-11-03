@@ -13,4 +13,5 @@ with tempfile.TemporaryDirectory() as d:
  assert (repo/'VERSION').read_text().strip()==expected
  assert subprocess.check_output([calc,'--diagnostic'],text=True).strip()==expected
  assert 'file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LMTORCH_RELEASE_VERSION' in (repo/'CMakeLists.txt').read_text()
+ assert 'want="lmtorch $(cat VERSION)"' in (repo/'test.sh').read_text()
  print('PASS lmtorch run-derived release version and stamp')

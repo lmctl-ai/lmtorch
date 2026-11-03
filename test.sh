@@ -92,7 +92,7 @@ ok "--lmcode-schema summary lists every member"
 ok "host flag standard exposes only lmcode schema/signatures and version"
 "$SYS_PYTHON" tests/check-unbounded-artifacts.py "$BIN" "$LMSCRIPT_PY" || fail "implicit artifact/text bounds"
 ok "headers, artifacts, tensor ranks and text inputs have no implicit size ceilings"
-want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)"
+want="lmtorch $(cat VERSION)"
 [ "$("$BIN" --version)" = "$want" ] || fail "--version: '$("$BIN" --version)' (want '$want')"
 set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
 [ "$code" = 2 ] || fail "--version with an extra argument must be refused (exit $code)"
