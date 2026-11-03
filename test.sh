@@ -169,7 +169,7 @@ cat > "$WORK/bools.lms" <<LMS
 p = _lmcode_ schema="$HERE_N/schema/lmtorch.dsl.json";
 torch.tensor("[true, false]").save("bools.safetensors");
 end _lmcode_
-r = run_lmcode(p, {command: ["$BIN", "--lmcode", "$DSLFILE"]});
+r = run_lmcode(p, {command: ["$BIN", "--lmcode", "\$DSLFILE"]});
 if (!r.ok) { exit(1); }
 LMS
 (cd "$WORK" && "$LMSCRIPT" bools.lms) || fail "writing a BOOL artifact"
@@ -177,7 +177,7 @@ cat > "$WORK/check-bool.lms" <<LMS
 p = _lmcode_ schema="$HERE_N/schema/lmtorch.dsl.json";
 out.check(torch.load("bools.safetensors").dtype() == DType.BOOL, "BOOL dtype survives safetensors");
 end _lmcode_
-r = run_lmcode(p, {command: ["$BIN", "--lmcode", "$DSLFILE"]});
+r = run_lmcode(p, {command: ["$BIN", "--lmcode", "\$DSLFILE"]});
 if (!r.ok) { exit(1); }
 LMS
 (cd "$WORK" && "$LMSCRIPT" check-bool.lms) || fail "native safetensors read lost the BOOL dtype"
