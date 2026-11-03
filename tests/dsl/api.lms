@@ -2,6 +2,7 @@
 # Usage: lmscript tests/dsl/api.lms [host] [work_dir]   (run_lmcode invokes the native host)
 BIN = ARGV.get(0, "lmtorch");
 WORK = ARGV.get(1, "dsl-api-work");
+mkdir(WORK, true);
 api = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let work = ${WORK};
 fn near(a: float, b: float) -> bool { return abs(a - b) < 0.000001; }

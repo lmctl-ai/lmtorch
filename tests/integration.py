@@ -8,21 +8,13 @@ import tempfile
 binary, lmscript = sys.argv[1:3]
 root = Path(__file__).resolve().parents[1]
 
-# Exercise the complete compiled lmcode API from one real host invocation.
+# Exercise the complete compiled lmcode API through run_lmcode and its terminal frame.
 with tempfile.TemporaryDirectory(prefix="lmtorch-api-") as scratch:
     work = Path(scratch)
     api = work / "api"
     api.mkdir()
-    bytecode = api / "api.dslb"
-    subprocess.run([lmscript, str(root / "tests/dsl/api.lms"), str(bytecode), "dsl-api-work"],
-                   cwd=root, check=True, capture_output=True)
-    result = subprocess.run([binary, "--lmcode", str(bytecode)], cwd=api, check=True, text=True, capture_output=True)
-    lines = result.stdout.splitlines()
-    starts = [i for i, line in enumerate(lines) if line == "LMCODE_RETURN_BEGIN"]
-    ends = [i for i, line in enumerate(lines) if line == "LMCODE_RETURN_END"]
-    assert len(starts) == len(ends) == 1 and ends[0] == starts[0] + 2, result.stdout
-    envelope = json.loads(lines[starts[0] + 1])
-    assert envelope["ok"] and envelope["result"]["series"] == [1, 2.5], envelope
+    subprocess.run([lmscript, str(root / "tests/dsl/api.lms"), binary, str(api / "dsl-api-work")],
+                   cwd=api, check=True, capture_output=True, text=True)
 
 # Preserve the native refusal/location suite using the manifest path through run_lmcode.
 with tempfile.TemporaryDirectory(prefix="lmtorch-negative-") as scratch:
