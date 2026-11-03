@@ -17,6 +17,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 schema = os.path.join(os.path.dirname(here), "schema", "lmtorch.dsl.json")
 
 PROGRAM = r'''
+BIN = ARGV[0];
 p = _lmcode_ schema=${SCHEMA};
 torch.manual_seed(123);
 out.set("rand", torch.rand(3, 2)).set("randn", torch.randn(4)).set("randint", torch.randint(0, 10, 5)).set("randperm", torch.randperm(7));
@@ -53,7 +54,9 @@ out.set("mse", x.mse_loss(x.sin()).item()).set("bce", x.bce_with_logits(x.sigmoi
 let py = torch.load_model("py-model.safetensors");
 out.set("py_forward", py.forward(x));
 end _lmcode_
-savedsl(p, "oracle.dslb");
+r = run_lmcode(p, {command: [BIN, "--lmcode", "$DSLFILE"]});
+if (!r.ok) { println(f"lmcode oracle failed {r.phase} {r.code}: {r.message}"); exit(1); }
+write_file("oracle-result.json", json_stringify(r.result));
 '''
 
 def close(name, actual, expected, tol=1e-5):
@@ -77,10 +80,8 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-oracle-", ignore_cleanup_errors
               metadata={"torchcli_format": "model-1", "layers": "linear(3, 5) -> tanh -> linear(5, 2)"})
     with open("oracle.lms", "w") as f:
         f.write(PROGRAM.replace("${SCHEMA}", json.dumps(schema)))
-    subprocess.run([lmscript, "oracle.lms"], check=True)
-    proc = subprocess.run([binary, "--lmcode", "oracle.dslb"], capture_output=True, text=True)
-    assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
-    r = json.loads(proc.stdout)["result"]
+    subprocess.run([lmscript, "oracle.lms", binary], check=True)
+    r = json.loads(open("oracle-result.json", encoding="utf-8").read())
 
     torch.manual_seed(123)
     close("rand", r["rand"], torch.rand(3, 2), 0)

@@ -17,6 +17,13 @@ with tempfile.TemporaryDirectory(prefix='host flag control ') as directory:
     env = dict(os.environ, HOME=str(scratch), LMCTL_HOME=str(scratch / '.lmctl'))
     def run(args):
         return subprocess.run([*command, *map(str, args)], capture_output=True, env=env)
+
+    def envelope(result):
+        lines = result.stdout.decode("utf-8").splitlines()
+        starts = [i for i, line in enumerate(lines) if line == "LMCODE_RETURN_BEGIN"]
+        ends = [i for i, line in enumerate(lines) if line == "LMCODE_RETURN_END"]
+        assert len(starts) == len(ends) == 1 and ends[0] == starts[0] + 2, (result.returncode, lines, result.stderr)
+        return json.loads(lines[starts[0] + 1])
     # Collect refusal controls so a baseline proves every retired spelling fails.
     failures = []
     for flag, rest in [(old, [missing]), (old + '-schema', ['--json']),
@@ -26,13 +33,26 @@ with tempfile.TemporaryDirectory(prefix='host flag control ') as directory:
         if str(missing).encode() in result.stdout + result.stderr: failures.append((flag, 'opened retired-flag input'))
     assert not failures, failures
     assert not list(scratch.iterdir()), 'retired option created scratch-HOME state'
+
+    # The lmapi CLI and operation names are no longer a second host surface.
+    for args in (["--schema"], ["--cli-schema"], ["--cli-schema", "--json"],
+                 ["tensor_inspect", "--input", str(missing) + "#tensor"]):
+        result = run(args)
+        assert result.returncode == 2, (args, result.returncode, result.stdout, result.stderr)
+        error = envelope(result)
+        assert not error["ok"] and error["phase"] == "cli" and error["code"] == "CLI_USAGE", (args, error)
+        assert str(missing).encode() not in result.stdout + result.stderr
+    assert not list(scratch.iterdir()), 'legacy options created scratch-HOME state'
+
     result = run(['--lmcode-schema', '--json'])
     assert (result.returncode, result.stdout, result.stderr) == (0, schema.read_bytes(), b''), result
     json.loads(result.stdout)
     result = run(['--lmcode-signatures'])
     assert result.returncode == 0 and result.stdout and not result.stderr, result
-    # The selector must recognize execution, yielding a loader error rather than usage.
+    # The host recognizes execution and returns a terminal load-failure frame.
     result = run(['--lmcode', missing])
-    assert result.returncode == 3, ('new execution option did not reach the loader', result)
+    assert result.returncode == 3, ('new execution option did not reach the loader', result.returncode, result.stdout, result.stderr)
+    error = envelope(result)
+    assert not error["ok"] and error["phase"] == "load", error
     assert not missing.exists()
 print('PASS hard flag cutover: exact schema/signatures, new loader route, retired options refused before file effects')

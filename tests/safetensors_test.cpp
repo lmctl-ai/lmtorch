@@ -16,7 +16,7 @@ using namespace lmtorch;
 // paths must stay inside it); portable replacement for mkstemp + unlink.
 static std::string fresh(const std::string&name){static std::mt19937_64 rng(static_cast<uint64_t>(getpid())*1000003u+static_cast<uint64_t>(std::random_device{}()));for(;;){auto p=(std::filesystem::temp_directory_path()/(name+"-"+std::to_string(rng()%1000000000))).string();if(!std::filesystem::exists(p))return p;}}
 static std::string artifact(const std::string&name,const std::string&header,const std::string&data={}){std::string p=fresh(name);std::ofstream f(p,std::ios::binary|std::ios::trunc);uint64_t n=header.size();for(int i=0;i<8;++i)f.put(static_cast<char>((n>>(i*8))&255));f<<header<<data;return p;}
-template<class F> static bool throws_tool(F&&f,const std::string&code){try{f();}catch(const lmcpp::Error&e){return code.empty()?e.code==lmcpp::ErrorCode::Conflict:e.data.value("tool_code",std::string())==code;}return false;}
+template<class F> static bool throws_tool(F&&f,const std::string&code){try{f();}catch(const Error&e){return code.empty()?e.code==ErrorCode::Conflict:e.data.value("tool_code",std::string())==code;}return false;}
 int main(){try { std::filesystem::current_path(std::filesystem::temp_directory_path());std::string tmp=fresh("lmtorch-roundtrip");TensorData t{"F32",{2,2},{}};float values[]={1,2,3,4};t.bytes.resize(sizeof(values));std::memcpy(t.bytes.data(),values,sizeof(values));write_tensor(tmp,t);
 #ifndef _WIN32
   struct stat st{};assert(stat(tmp.c_str(),&st)==0&&(st.st_mode&0777)==0644);
@@ -40,5 +40,5 @@ int main(){try { std::filesystem::current_path(std::filesystem::temp_directory_p
   auto trailing=artifact("lmtorch-trailing",R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}})","12345678");assert(throws_tool([&]{read_tensor({trailing,"tensor"});},"INVALID_OFFSETS"));std::filesystem::remove(trailing);
   std::string boolbytes("\x00\x01\x02",3);auto badbool=artifact("lmtorch-badbool",R"({"tensor":{"dtype":"BOOL","shape":[3],"data_offsets":[0,3]}})",boolbytes);assert(throws_tool([&]{read_tensor({badbool,"tensor"});},"INVALID_ARTIFACT"));std::filesystem::remove(badbool);
   auto goodbool=artifact("lmtorch-goodbool",R"({"tensor":{"dtype":"BOOL","shape":[2],"data_offsets":[0,2]}})",std::string("\x00\x01",2));assert(read_tensor({goodbool,"tensor"}).bytes==std::vector<uint8_t>({0,1}));std::filesystem::remove(goodbool);
-  } catch (const lmcpp::Error& e) { fprintf(stderr, "lmcpp error: %s data=%s\n", e.message.c_str(), e.data.dump().c_str()); return 1; }
+  } catch (const Error& e) { fprintf(stderr, "lmtorch error: %s data=%s\n", e.what(), e.data.dump().c_str()); return 1; }
 }

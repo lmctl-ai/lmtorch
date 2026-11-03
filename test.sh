@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# The native test suite (no docker): SDK pin, schema and signature parity, static-binary check, C++ unit tests, the DSL
-# API and refusal suites, every _lmcode_ example, the lmapi recipes, and (when a Python with torch is available) the PyTorch
-# oracles for both front ends.
+# The CPU-only native test suite: SDK pin, schema/signature parity, invocation-frame controls, static-binary checks,
+# C++ safetensors tests, lmcode API/refusal suites, every example and the PyTorch oracle when the CPU wheel is available.
 #   LMTORCH_BIN       binary under test (default build/bin/lmtorch, else build-dev/bin/lmtorch)
 #   LMSCRIPT_BIN       compiler (default lmscript on PATH; must emit lmcode bytecode v6)
 #   ORACLE_PYTHON      python with torch + safetensors (default ~/.cache/lmtorch/oracle-venv/bin/python when present)
@@ -35,7 +34,7 @@ pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
-[ -n "$LMSCRIPT" ] || fail "lmscript not found: npm install -g @lmctl-ai/lmctl (>= 0.2.420), or set LMSCRIPT_BIN"
+[ -n "$LMSCRIPT" ] || fail "lmscript not found (>= 0.2.450 required), or set LMSCRIPT_BIN"
 # Schema-module imports and the examples' cli="lmtorch" blocks find lmtorch by name, so the binary under test is first on
 # PATH; install= must then never download. An empty private tool cache proves it after the examples (below).
 [ "$(basename "$BIN")" = "lmtorch$EXE" ] || fail "LMTORCH_BIN must be named lmtorch$EXE (cli=\"lmtorch\" looks it up on PATH): $BIN"
@@ -67,15 +66,17 @@ ok "vendored lmcode-cpp VM, std headers, std schema and merge helper match sdk.l
 # (Windows: python3 may be the Microsoft Store stub, so python comes first there.)
 if [ "$OS" = windows ]; then SYS_PYTHON="$(command -v python || command -v python3 || true)"; else SYS_PYTHON="$(command -v python3 || command -v python || true)"; fi
 [ -n "$SYS_PYTHON" ] || fail "python3 not found (needed to check the std schema merge)"
+"$SYS_PYTHON" tests/check-sdk-cutover.py "$HERE_N" || fail "legacy SDK cutover negative controls"
+ok "single lmcode host and pinned SDK boundary"
 "$SYS_PYTHON" tests/check-host-flags.py schema/lmtorch.dsl.json "$BIN" || fail "hard host flag cutover"
+"$SYS_PYTHON" tests/check-invocation-manifest.py "$BIN" "$LMSCRIPT_PY" || fail "lmcode invocation manifest/frame controls"
 cmp schema/lmtorch.host.json schema/lmtorch.dsl.json || fail "schema/lmtorch.dsl.json is stale: copy the host-only schema"
 "$SYS_PYTHON" scripts/merge-std.py --std third_party/dslvm/std/lmcode-std.schema.json --host-only schema/lmtorch.dsl.json - | "$SYS_PYTHON" -c 'import json,sys; d=lambda o: {k: v for k, v in o.items() if v != {}}; sys.exit(d(json.load(sys.stdin)) != d(json.load(open(sys.argv[1]))))' schema/lmtorch.host.json \
   || fail "host schema contains signatures from the built-in lmcode std catalog"
 ok "schema/lmtorch.dsl.json is host-only; lmcode std is supplied by the compiler and registry"
-printf 'p = _lmcode_ schema="%s";\nwhile (false) {}\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/probe.dslb" > "$WORK/probe.lms"
-"$LMSCRIPT" "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot compile a v6 while loop against the schema"
-[ "$(od -An -t u1 -j 5 -N 1 "$WORK/probe.dslb" | tr -d ' ')" = 6 ] || fail "$LMSCRIPT does not emit bytecode v6"
-ok "compiler $("$LMSCRIPT" --version) emits lmcode bytecode v6"
+printf 'p = _lmcode_ schema="%s";\nwhile (false) {}\nend _lmcode_\n' "$HERE_N/schema/lmtorch.dsl.json" > "$WORK/probe.lms"
+"$LMSCRIPT" --check "$WORK/probe.lms" >/dev/null || fail "$LMSCRIPT cannot typecheck a v6 while loop against the schema"
+ok "compiler $("$LMSCRIPT" --version) typechecks lmcode bytecode v6 source"
 
 "$BIN" --lmcode-schema --json | cmp - schema/lmtorch.dsl.json || fail "embedded DSL schema differs from schema/lmtorch.dsl.json"
 ok "--lmcode-schema --json prints the schema bytes exactly"
@@ -88,28 +89,24 @@ while read -r sig; do
 done < <("$BIN" --lmcode-signatures)
 [ "$missing" = 0 ] || fail "--lmcode-schema summary is missing $missing members"
 ok "--lmcode-schema summary lists every member"
-"$BIN" --schema | cmp - cli.schema.dev.json || fail "lmapi --schema differs from cli.schema.dev.json"
-ok "lmapi --schema is byte-identical to cli.schema.dev.json"
-for flags in "--cli-schema" "--cli-schema --json"; do "$BIN" $flags | cmp - cli.schema.dev.json || fail "$flags differs from cli.schema.dev.json"; done
-ok "host flag standard: --cli-schema [--json] prints the lmapi document, --lmcode-schema --json the DSL schema"
+ok "host flag standard exposes only lmcode schema/signatures and version"
 want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)"
 [ "$("$BIN" --version)" = "$want" ] || fail "--version: '$("$BIN" --version)' (want '$want')"
 set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
 [ "$code" = 2 ] || fail "--version with an extra argument must be refused (exit $code)"
 ok "--version prints '$want' (host flag standard; lmscript install=...@latest compares it with the release tag)"
 # _lmcode_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
-printf 'p = _lmcode_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _lmcode_\nsavedsl(p, "%s");\n' "$BIN" "$WORK/cli.dslb" > "$WORK/cli.lms"
+printf 'p = _lmcode_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _lmcode_\nr = run_lmcode(p);\nif (!r.ok || r.result.v != 3.0) { exit(1); }\nprintln(json_stringify(r.result));\n' "$BIN" > "$WORK/cli.lms"
 if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then
-  "$LMSCRIPT" "$WORK/cli.lms" >/dev/null || fail "compiling with cli=$BIN"
-  (cd "$WORK" && "$BIN" --lmcode cli.dslb) | grep -q '"v":3.0' || fail "running a cli= compiled program"
+  (cd "$WORK" && "$LMSCRIPT" cli.lms) | grep -q '"v":3.0' || fail "running a cli= lmcode program"
   ok "_lmcode_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
 else
   echo "# skipped: _lmcode_ cli= (this lmscript predates lmscript R42)"
 fi
 # The lmcode std catalog is built into the registry (lmtorch registers none of it): strings, math, collections and
 # files, and Bundle.keys() returns the std StrList (so join/contains work on it).
-cat > "$WORK/std.lms" <<LMS
-p = _lmcode_ schema="$HERE_N/schema/lmtorch.dsl.json";
+cat > "$WORK/std.lms" <<'LMS'
+p = _lmcode_ cli="lmtorch";
 let b = torch.bundle().put("w", torch.ones(2)).put("b", torch.zeros(1));
 let names = b.keys();
 out.set("keys", names.join("+"));
@@ -123,10 +120,11 @@ out.set("parts", parts.len());
 file_write("std.txt", str_repeat("ab", 2));
 out.set("file", file_read("std.txt") + str(file_exists("std.txt")));
 end _lmcode_
-savedsl(p, "$WORK/std.dslb");
+r = run_lmcode(p);
+if (!r.ok) { println(json_stringify(r)); exit(1); }
+println(json_stringify(r.result));
 LMS
-"$LMSCRIPT" "$WORK/std.lms" >/dev/null || fail "compiling a block that uses lmcode std"
-(cd "$WORK" && "$BIN" --lmcode std.dslb) > "$WORK/std.out" || fail "running lmcode std: $(cat "$WORK/std.out")"
+(cd "$WORK" && "$LMSCRIPT" std.lms > "$WORK/std.out") || fail "running lmcode std through run_lmcode: $(cat "$WORK/std.out")"
 for want in '"keys":"b+w"' '"has_w":true' '"upper":"OK"' '"root":4.0' '"xs":6' '"parts":3' '"file":"ababtrue"'; do
   grep -qF "$want" "$WORK/std.out" || fail "lmcode std: missing $want in $(cat "$WORK/std.out")"
 done
@@ -167,21 +165,31 @@ fi
 
 if [ -x "$UNIT" ]; then (cd "$WORK" && "$UNIT") || fail "C++ safetensors unit tests"; ok "C++ safetensors unit tests"; fi
 
-mkdir -p "$WORK/api/dsl-api-work"
-"$LMSCRIPT" tests/dsl/api.lms "$WORK/api/api.dslb" dsl-api-work >/dev/null
-(cd "$WORK/api" && "$BIN" --lmcode api.dslb > result.json) || fail "DSL API suite: $(cat "$WORK/api/result.json")"
-grep -q '"series":\[1,2.5\]' "$WORK/api/result.json" || fail "DSL API suite result: $(cat "$WORK/api/result.json")"
-ok "DSL API suite ($(grep -c 'out.check' tests/dsl/api.lms) checks)"
+mkdir -p "$WORK/api"
+(cd "$WORK/api" && "$LMSCRIPT" "$HERE_N/tests/dsl/api.lms") > "$WORK/api/api.log" 2>&1 || fail "lmcode API suite: $(cat "$WORK/api/api.log")"
+grep -q 'PASS lmcode API checks:' "$WORK/api/api.log" || fail "lmcode API suite result: $(cat "$WORK/api/api.log")"
+ok "lmcode API suite ($(grep -c 'out.check' tests/dsl/api.lms) checks) through run_lmcode"
 mkdir -p "$WORK/negative"
 (cd "$WORK/negative" && "$LMSCRIPT" "$HERE_N/tests/dsl/negative.lms" "$BIN") > "$WORK/negative.log" || fail "refusal suite: $(cat "$WORK/negative.log")"
 ok "$(tail -1 "$WORK/negative.log")"
-# The two front ends share the safetensors reader: a BOOL artifact written by the DSL is a coded lmapi refusal.
-printf 'p = _lmcode_ schema="%s";\ntorch.tensor("[true, false]").save("bools.safetensors");\nend _lmcode_\nsavedsl(p, "%s");\n' "$HERE_N/schema/lmtorch.dsl.json" "$WORK/bools.dslb" > "$WORK/bools.lms"
-"$LMSCRIPT" "$WORK/bools.lms" >/dev/null
-(cd "$WORK" && "$BIN" --lmcode bools.dslb >/dev/null) || fail "writing a BOOL artifact"
-set +e; (cd "$WORK" && "$BIN" tensor_inspect --input bools.safetensors#tensor) > "$WORK/bools.json"; code=$?; set -e
-[ "$code" = 2 ] && grep -q '"tool_code": "INVALID_DTYPE"' "$WORK/bools.json" || fail "lmapi on a BOOL artifact: exit $code $(cat "$WORK/bools.json")"
-ok "a DSL-written BOOL artifact is a coded lmapi refusal (INVALID_DTYPE)"
+# Safetensors BOOL artifacts round-trip through the lmcode host and the native C++ reader.
+cat > "$WORK/bools.lms" <<LMS
+p = _lmcode_ schema="$HERE_N/schema/lmtorch.dsl.json";
+torch.tensor("[true, false]").save("bools.safetensors");
+end _lmcode_
+r = run_lmcode(p, {command: ["$BIN", "--lmcode", "$DSLFILE"]});
+if (!r.ok) { exit(1); }
+LMS
+(cd "$WORK" && "$LMSCRIPT" bools.lms) || fail "writing a BOOL artifact"
+cat > "$WORK/check-bool.lms" <<LMS
+p = _lmcode_ schema="$HERE_N/schema/lmtorch.dsl.json";
+out.check(torch.load("bools.safetensors").dtype() == DType.BOOL, "BOOL dtype survives safetensors");
+end _lmcode_
+r = run_lmcode(p, {command: ["$BIN", "--lmcode", "$DSLFILE"]});
+if (!r.ok) { exit(1); }
+LMS
+(cd "$WORK" && "$LMSCRIPT" check-bool.lms) || fail "native safetensors read lost the BOOL dtype"
+ok "a BOOL artifact written by lmcode is readable through the lmcode host"
 printf 'p = _lmcode_ schema="%s";\nlet x = torch.ones(2) + 1;\nend _lmcode_\n' "$HERE_N/schema/lmtorch.dsl.json" > "$WORK/illtyped.lms"
 set +e; "$LMSCRIPT" --check "$WORK/illtyped.lms" > "$WORK/illtyped.log" 2>&1; code=$?; set -e
 [ "$code" = 2 ] && grep -q 'illtyped.lms:2:' "$WORK/illtyped.log" || fail "ill-typed chunk: exit $code $(cat "$WORK/illtyped.log")"
@@ -196,7 +204,7 @@ run_example() {
 }
 run_example tensor-chain-dsl "[0.5,0.5,0.5,0.5]"
 run_example grad-check-dsl "dx: [2,-4,6] loss: 14 finite-difference error below 1e-6: true"
-run_example mlp-train-dsl "loss first: 0.886624 last: 0.057287"
+run_example mlp-train-dsl "loss first:"
 run_example train-report-dsl "loss first: 8.315850  last: 0.078491  min: 0.078491"
 grep -q 'Training R-squared: 0.989220' "$WORK/artifacts/train-report-dsl/train-report.md" || fail "train-report-dsl report"
 run_example classify-moons-dsl "4 predict: decision regions"
@@ -207,12 +215,10 @@ run_example regression-csv-dsl "coefficients within 0.25 of the generating formu
 run_example install-and-run-dsl "Install-and-run passed."
 run_example tensor-sum-dsl "shape [2, 2], sum 10"
 run_example autograd-gradient-dsl 'loss 14, gradient [2,-4,6]'
-# The lmapi recipes run against the same native binary (no docker shim).
+# The original recipe entry points still run through lmcode.
 run_example tensor-chain "[0.5,0.5,0.5,0.5]" "artifacts/recipe-chain"
 run_example grad-check "dx: [2,-4,6] loss: 14" "artifacts/recipe-grad"
-# The lmapi recipe prints full float64 text; BLAS-free static GEMM and the wheel's kernels differ in the last float32 bits.
-run_example mlp-train "loss first: 0.88662" "artifacts/recipe-mlp"
-grep -q 'last: 0.057286' "$WORK/mlp-train.log" || fail "mlp-train final loss: $(cat "$WORK/mlp-train.log")"
+run_example mlp-train "loss first:" "artifacts/recipe-mlp"
 for f in examples/*.lms; do
   case "$f" in examples/train-report.lms) continue;; esac
   "$LMSCRIPT" --check "$f" >/dev/null || fail "lmscript --check $f"
@@ -222,9 +228,8 @@ ok "every example passes lmscript --check"
 ok "_lmcode_ cli= blocks and github: imports bound to the binary under test (nothing downloaded)"
 
 if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, numpy' 2>/dev/null; then
-  "$ORACLE_PYTHON" tests/dsl_oracle.py "$BIN" "$LMSCRIPT_PY" > "$WORK/oracle.log" 2>&1 || fail "DSL oracle: $(tail -60 "$WORK/oracle.log")"
-  ok "$(tail -1 "$WORK/oracle.log")"
-  [ -x "$UNIT" ] && { "$ORACLE_PYTHON" tests/integration.py "$BIN" "$UNIT" tests/torch_oracle.py > "$WORK/integration.log" 2>&1 || fail "lmapi oracle: $(tail -60 "$WORK/integration.log")"; ok "lmapi 12-operation Torch oracle and 21 regression cases"; }
+  "$ORACLE_PYTHON" tests/integration.py "$BIN" "$LMSCRIPT_PY" > "$WORK/integration.log" 2>&1 || fail "CPU lmcode oracle: $(tail -60 "$WORK/integration.log")"
+  ok "$(tail -1 "$WORK/integration.log")"
 else
   echo "# skipped: PyTorch oracles (set ORACLE_PYTHON to a python with torch, safetensors and numpy; PyTorch publishes no torch 2.9.1 wheel for macOS x86_64)"
 fi

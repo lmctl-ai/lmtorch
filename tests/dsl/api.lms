@@ -1,6 +1,6 @@
-# API semantics: one DSL program with an out.check per behavior; any failure exits 4 naming the check.
-# Usage: lmscript tests/dsl/api.lms OUT.dslb [work_dir]   then   lmtorch --lmcode OUT.dslb   (cwd must contain work_dir)
-OUT = ARGV.get(0, "build/api.dslb");
+# lmcode API semantics: one host program with an out.check per behavior; any failure exits 4 naming the check.
+# Usage: lmscript tests/dsl/api.lms [host] [work_dir]   (run_lmcode invokes the native host)
+BIN = ARGV.get(0, "lmtorch");
 WORK = ARGV.get(1, "dsl-api-work");
 api = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let work = ${WORK};
@@ -244,4 +244,6 @@ bools.save(work + "/bools.safetensors");
 out.check(torch.load(work + "/bools.safetensors").equal(bools) && bools.to(DType.F32).sum().item() == 2.0, "BOOL save/load and conversion");
 out.check(torch.randperm(0).numel() == 0 && torch.linspace(0.0, 1.0, 0).numel() == 0, "empty random/linspace");
 end _lmcode_
-savedsl(api, OUT);
+result = run_lmcode(api, {command: [BIN, "--lmcode", "$DSLFILE"]});
+if (!result.ok) { println(f"lmcode API host failure {result.phase} {result.code}: {result.message}"); exit(1); }
+println("PASS lmcode API checks:", result.result.series);

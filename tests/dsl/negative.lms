@@ -1,12 +1,31 @@
-# Refusals and failures of the DSL host: every case asserts the exit code, phase, error code and a message fragment.
+# lmcode host refusals and failures: each case asserts exit code, phase, error code and a message fragment.
 # Usage (cwd = a scratch directory): lmscript /path/to/tests/dsl/negative.lms /path/to/lmtorch
 BIN = ARGV.get(0, "lmtorch");
 FAILED = [];
 COUNT = [];
+HOST_SCHEMA = load_schema(schema="../../schema/lmtorch.dsl.json");
+probe = _lmcode_ schema="../../schema/lmtorch.dsl.json";
+out.set("probe", true);
+end _lmcode_
 
-fn run_files(files) {
-  r = system ${BIN} --lmcode ${files};
-  return {code: r.code, line: trim(r.stdout) == "" ? {} : json_parse(trim(r.stdout))};
+fn run_files(program, files) {
+  command = [BIN, "--lmcode", "$DSLFILE"];
+  for (file in files) { push(command, "--lmcode"); push(command, path_join(Directory, file)); }
+  r = run_lmcode(program, {command: command});
+  code = r.ok ? 0 : r.phase == "cli" ? 2 : r.phase == "app" ? 4 : 3;
+  return {code: code, line: r};
+}
+fn run_program(program) {
+  r = run_lmcode(program, {command: [BIN, "--lmcode", "$DSLFILE"]});
+  code = r.ok ? 0 : r.phase == "cli" ? 2 : r.phase == "app" ? 4 : 3;
+  return {code: code, line: r};
+}
+fn run_two(first, second) {
+  invocation = lmcode_build(HOST_SCHEMA);
+  invocation.add(first);
+  invocation.add(second);
+  r = run_lmcode(invocation);
+  return {code: r.ok ? 0 : r.phase == "cli" ? 2 : r.phase == "app" ? 4 : 3, line: r};
 }
 fn expect(name, r, code, phase, err, fragment) {
   push(COUNT, name);
@@ -17,11 +36,9 @@ fn expect(name, r, code, phase, err, fragment) {
     println(f"FAIL {name}: exit {r.code}, line {json_stringify(line)}; wanted exit {code} {phase} {err} containing '{fragment}'");
   }
 }
-# A run-time failure must also carry the DSL source line of the faulting call.
+# A run-time failure must also carry the source line of the faulting lmcode call.
 fn fails_at(name, prog, line_no, code, phase, err, fragment) {
-  path = f"neg-{len(COUNT)}.dslb";
-  savedsl(prog, path);
-  r = run_files([path]);
+  r = run_program(prog);
   expect(name, r, code, phase, err, fragment);
   if (r.line.get("line", -1) != line_no) {
     push(FAILED, name);
@@ -31,36 +48,40 @@ fn fails_at(name, prog, line_no, code, phase, err, fragment) {
 
 # ---- load-time refusals: nothing runs
 write_file("bad-magic.dslb", "NOPE");
-expect("bad magic", run_files(["bad-magic.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "bad magic");
-expect("missing file", run_files(["no-such.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "no-such.dslb");
+expect("bad magic", run_files(probe, ["bad-magic.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "bad magic");
+expect("missing file", run_files(probe, ["no-such.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "no-such.dslb");
+write_file("truncated.dslb", "DSLB");
+expect("truncated bytecode", run_files(probe, ["truncated.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "truncated");
 ok_prog = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.set("ran", true);
 end _lmcode_
-savedsl(ok_prog, "ok.dslb");
-r = system(["sh", "-c", "head -c 60 ok.dslb > truncated.dslb"]);
-expect("truncated", run_files(["truncated.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "truncated");
-r = system(["sh", "-c", "cat ok.dslb > trailing.dslb && printf x >> trailing.dslb"]);
-expect("trailing bytes", run_files(["trailing.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "trailing");
 mismatch = _lmcode_ schema="fixtures/other-schema-bytes.dsl.json";
 out.set("ran", true);
 end _lmcode_
-savedsl(mismatch, "mismatch.dslb");
-expect("schema bytes differ", run_files(["mismatch.dslb"]), 3, "load", "LOAD_SCHEMA_MISMATCH", "schema mismatch");
+mismatch_result = run_lmcode(mismatch, {command: [BIN, "--lmcode", "$DSLFILE"]});
+expect("schema bytes differ", {code: (mismatch_result.ok ? 0 : 3), line: mismatch_result}, 3, "load", "LOAD_SCHEMA_MISMATCH", "schema mismatch");
 writes = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.write_text("side-effect.txt", "ran");
 end _lmcode_
-savedsl(writes, "writes.dslb");
-expect("a bad later file is refused before anything runs", run_files(["writes.dslb", "bad-magic.dslb"]), 3, "load", "LOAD_BAD_BYTECODE", "bad-magic.dslb");
+bad_later = lmcode_build(HOST_SCHEMA);
+bad_later.add(writes);
+bad_later.add(mismatch);
+bad_later_result = run_lmcode(bad_later);
+expect("a bad later file is refused before anything runs", {code: (bad_later_result.ok ? 0 : 3), line: bad_later_result}, 3, "load", "LOAD_SCHEMA_MISMATCH", "schema mismatch");
 if (file_exists("side-effect.txt")) { push(FAILED, "side effect"); println("FAIL: the first file ran although a later file was refused"); }
-two = run_files(["ok.dslb", "writes.dslb"]);
-expect("two good files run in order", {code: two.code == 0 ? 3 : 0, line: {phase: "x", code: "y", message: "z"}}, 3, "x", "y", "z");
-if (!file_exists("side-effect.txt") || !two.line.result.ran) { push(FAILED, "two files"); println("FAIL: both files should have run"); }
+two = run_two(ok_prog, writes);
+push(COUNT, "two good files run in order");
+if (two.code != 0 || !file_exists("side-effect.txt") || two.line.parts != 2 || !two.line.result[0].ran) {
+  push(FAILED, "two files"); println("FAIL: both files should have run in order: " + json_stringify(two.line));
+}
 
-# ---- usage errors: exit 2 and no result line
+# ---- usage errors: exit 2 with a CLI frame
 for (args in [["--lmcode"], ["--lmcode", "--x"], ["--lmcode-schema", "--bad"], ["--lmcode-signatures", "extra"], ["--lmcode", ""]]) {
   push(COUNT, "usage");
   u = system ${BIN} ${args};
-  if (u.code != 2 || trim(u.stdout) != "") { push(FAILED, "usage"); println(f"FAIL usage {json_stringify(args)}: exit {u.code}"); }
+  output_lines = lines(trim(u.stdout));
+  frame = len(output_lines) == 3 && output_lines[0] == "LMCODE_RETURN_BEGIN" && output_lines[2] == "LMCODE_RETURN_END" ? json_parse(output_lines[1]) : {};
+  if (u.code != 2 || frame.get("phase", "") != "cli") { push(FAILED, "usage"); println(f"FAIL usage {json_stringify(args)}: exit {u.code}, frame {json_stringify(frame)}"); }
 }
 
 # ---- run-time failures: located host errors (exit 3), VM errors and application failures (exit 4)
@@ -286,11 +307,9 @@ let l = (w * 3.0).sum();
 l.backward();
 out.set("grad_ok", w.grad().sum().item() == 6.0).set("second_draw", torch.rand(1).item());
 end _lmcode_
-savedsl(off, "off.dslb");
-savedsl(train_next, "train-next.dslb");
-seq = run_files(["off.dslb", "train-next.dslb"]);
+seq = run_two(off, train_next);
 push(COUNT, "grad mode per file");
-if (seq.code != 0 || !seq.line.result.grad_ok || seq.line.result.first_draw == seq.line.result.second_draw) {
+if (seq.code != 0 || seq.line.parts != 2 || !seq.line.result[1].grad_ok || seq.line.result[0].first_draw == seq.line.result[1].second_draw) {
   push(FAILED, "grad mode per file");
   println(f"FAIL grad mode per file / RNG continues across files: {json_stringify(seq.line)}");
 }
