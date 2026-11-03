@@ -4,7 +4,8 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "Minimum macOS version")
 # Windows: the static MSVC runtime (/MT) in every target, matching scripts/build-libtorch.sh, so lmtorch.exe needs no
 # Visual C++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "MSVC runtime library")
-project(lmtorch VERSION 0.5.1 LANGUAGES C CXX)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LMTORCH_RELEASE_VERSION LIMIT_COUNT 1)
+project(lmtorch VERSION ${LMTORCH_RELEASE_VERSION} LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
