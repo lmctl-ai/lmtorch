@@ -32,8 +32,7 @@ permissions:
   contents: read
 
 env:
-  LMCPP_REF: 93a1847c081894ab1e9ed02ad5ea6350b5d5bd06
-  LMCTL_VERSION: 0.2.420   # lmscript with DSL bytecode v5, _lmcode_ blocks and implicit lmcode std
+  LMCTL_VERSION: 0.2.450   # lmscript with lmcode bytecode v6 and the run_lmcode invocation manifest
 
 jobs:
   plan:
@@ -83,13 +82,6 @@ jobs:
         with:
           path: lmtorch
           persist-credentials: false
-      - name: Checkout pinned lmcpp
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
-        with:
-          repository: lmctl-ai/lmcpp
-          ref: ${{ env.LMCPP_REF }}
-          path: lmcpp
-          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af   # v4.1.0
         with:
           node-version: '24.15'
@@ -131,7 +123,9 @@ jobs:
           echo "LIBTORCH_BUILD=D:/pt/b" >> "$GITHUB_ENV"
           echo "LIBTORCH_PYTHON=python" >> "$GITHUB_ENV"
       - name: lmscript compiler
-        run: npm install -g "@lmctl-ai/lmctl@${LMCTL_VERSION}"
+        run: |
+          npm install --prefix "$RUNNER_TEMP/lmctl" "@lmctl-ai/lmctl@${LMCTL_VERSION}"
+          echo "$RUNNER_TEMP/lmctl/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Secrets scan
         run: python3 lmtorch/scripts/no-secrets.py
       - name: Oracle venv (PyTorch wheel; tests only, never shipped)
@@ -161,7 +155,6 @@ jobs:
           key: ${{ steps.libtorch.outputs.cache-primary-key }}
       - name: Build lmtorch
         env:
-          LMCPP_DIR: ${{ github.workspace }}/lmcpp
           JOBS: ${{ matrix.jobs }}
         run: |
           if [ "${{ matrix.mode }}" = dev ]; then lmtorch/scripts/build-native.sh --dev; else lmtorch/scripts/build-native.sh; fi

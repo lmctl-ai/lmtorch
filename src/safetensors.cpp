@@ -25,9 +25,7 @@
 #endif
 
 namespace lmtorch {
-using lmcpp::Error;
-using lmcpp::ErrorCode;
-using Json = lmcpp::Json;
+using Json = nlohmann::ordered_json;
 namespace {
 constexpr uint64_t kMaxHeader = 1024 * 1024;
 constexpr uint64_t kMaxArtifact = 256 * 1024 * 1024;
@@ -157,5 +155,5 @@ std::string write_bundle(const std::string&path,const TensorBundle&bundle,bool r
 #endif
 }
 std::string write_tensor(const std::string&path,const TensorData&t,bool replace){TensorBundle b;b.tensors.emplace("tensor",t);return write_bundle(path,b,replace);}
-lmcpp::Json descriptor(const TensorRef&ref,const TensorData&t){return{{"ref",ref.path+"#"+ref.key},{"path",ref.path},{"key",ref.key},{"dtype",t.dtype},{"shape",t.shape},{"nbytes",t.bytes.size()}};}
+nlohmann::ordered_json descriptor(const TensorRef&ref,const TensorData&t){return{{"ref",ref.path+"#"+ref.key},{"path",ref.path},{"key",ref.key},{"dtype",t.dtype},{"shape",t.shape},{"nbytes",t.bytes.size()}};}
 }

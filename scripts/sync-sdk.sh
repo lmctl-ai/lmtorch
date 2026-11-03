@@ -6,9 +6,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK="${LMCODE_CPP:-$HERE/../lmcode-cpp}"
 LOCK="$HERE/sdk.lock"
 VENDOR=third_party/dslvm
+PINNED_COMMIT=7cf09164797324e07b0f2ebed8def995b007f095
 hash() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
 if [ "${1:-}" = "--verify" ]; then
   [ -f "$LOCK" ] || { echo "sdk.lock missing" >&2; exit 1; }
+  [ "$(sed -n 's/^commit=//p' "$LOCK")" = "$PINNED_COMMIT" ] || { echo "sdk.lock does not name the reviewed lmcode-cpp commit $PINNED_COMMIT" >&2; exit 1; }
   count=0
   while IFS='=' read -r key want; do
     case "$key" in
@@ -29,8 +31,9 @@ if [ "${1:-}" = "--verify" ]; then
   exit 0
 fi
 [ -f "$SDK/include/dslvm.hpp" ] || { echo "lmcode-cpp checkout not found at $SDK (set LMCODE_CPP)" >&2; exit 1; }
-ref="${LMCODE_CPP_REF:-origin/main}"
+ref="${LMCODE_CPP_REF:-$PINNED_COMMIT}"
 commit="$(git -C "$SDK" rev-parse "$ref")"
+[ "$commit" = "$PINNED_COMMIT" ] || { echo "refusing unreviewed lmcode-cpp commit $commit (expected $PINNED_COMMIT)" >&2; exit 1; }
 rm -rf "$HERE/$VENDOR"
 mkdir -p "$HERE/$VENDOR/stdlib" "$HERE/$VENDOR/std"
 printf 'repo=https://github.com/lmctl-ai/lmcode-cpp\ncommit=%s\n' "$commit" > "$LOCK"

@@ -201,5 +201,6 @@
       }
     }
   },
+  "result": { "type": "Json" },
   "context": { "torch": "Torch", "out": "Out" }
 }

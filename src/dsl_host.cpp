@@ -4,6 +4,7 @@
 #include "lmtorch/dsl_host.hpp"
 #include "lmtorch/safetensors.hpp"
 #include "dslvm.hpp"
+#include "stdlib/invocation.hpp"
 #include "dsl_schema_embedded.hpp"
 #include <torch/torch.h>
 #include <torch/version.h>
@@ -190,11 +191,11 @@ torch::Tensor from_data(const lmtorch::TensorData& d) {
   if (!d.bytes.empty()) std::memcpy(t.data_ptr(), d.bytes.data(), d.bytes.size());
   return t;
 }
-// lmcpp errors from the safetensors layer carry a code and message; surface the message.
+// Artifact errors are translated at the host boundary, preserving a stable lmcode message.
 template <class F> auto io(F&& f) -> decltype(f()) {
   try { return f(); }
   catch (const dslvm::Error&) { throw; }
-  catch (const lmcpp::Error& e) { fail(e.message); }
+  catch (const lmtorch::Error& e) { fail(e.what()); }
 }
 void save_bundle(const std::string& path, const std::map<std::string, torch::Tensor>& tensors, const std::map<std::string, std::string>& meta) {
   if (path.empty()) fail("output path must not be empty");
@@ -416,7 +417,7 @@ void method(dslvm::Registry& r, const std::string& type, const std::string& name
     try { return fn(obj, a); }
     catch (const dslvm::Error&) { throw; }
     catch (const c10::Error& e) { fail(who + ": " + first_line(e.what_without_backtrace())); }
-    catch (const lmcpp::Error& e) { fail(who + ": " + e.message); }
+    catch (const lmtorch::Error& e) { fail(who + ": " + e.what()); }
     catch (const std::bad_alloc&) { fail(who + ": out of memory"); }
     catch (const std::exception& e) { fail(who + ": " + first_line(e.what())); }
     catch (...) { fail(who + ": unknown failure"); }
@@ -929,7 +930,7 @@ void register_torch(dslvm::Registry& r, Host& h) {
 void print_summary(dslvm::Registry& reg) {
   std::vector<std::string> order, functions;
   std::map<std::string, std::vector<std::string>> members;
-  std::cout << "lmtorch DSL host: compile with lmscript against `lmtorch --lmcode-schema --json`, run with `lmtorch --lmcode FILE.dslb`\n";
+  std::cout << "lmtorch lmcode host: compile with lmscript against `lmtorch --lmcode-schema --json`, run with `lmtorch --lmcode FILE.dslb`\n";
   std::cout << "enum DType: F32, F64, I64, BOOL\n";
   for (const auto& sig : reg.signatures()) {
     if (sig.rfind("context ", 0) == 0) std::cout << sig << "\n";
@@ -949,63 +950,137 @@ void print_summary(dslvm::Registry& reg) {
 }
 }  // namespace
 
-bool selects_dsl(int argc, char** argv) {
-  if (argc < 2) return false;
-  std::string a = argv[1];
-  return a == "--lmcode" || a == "--lmcode-schema" || a == "--lmcode-signatures";
-}
-
 int run(int argc, char** argv) {
-  const std::string usage = "usage: lmtorch --lmcode-schema [--json] | --lmcode-signatures | --lmcode FILE.dslb [FILE.dslb ...]\n";
-  Host host;
-  dslvm::Registry reg;
-  register_torch(reg, host);
-  std::string first = argv[1];
+  const std::string usage = "usage: lmtorch --version | --lmcode-schema [--json] | --lmcode-signatures | --lmcode FILE.dslb [--first FILE.dslb] [--last FILE.dslb]\n";
+  if (argc < 2) return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
+  const std::string first = argv[1];
   if (first == "--lmcode-schema") {
-    if (argc == 2) { print_summary(reg); return std::cout ? 0 : 4; }
+    if (argc == 2) {
+      dslvm::Registry registry;
+      Host host;
+      register_torch(registry, host);
+      print_summary(registry);
+      return std::cout ? 0 : 4;
+    }
     if (argc == 3 && std::string(argv[2]) == "--json") {
       std::cout.write(reinterpret_cast<const char*>(embedded_dsl_schema), std::streamsize(embedded_dsl_schema_size));
       return std::cout ? 0 : 4;
     }
-    std::cerr << usage;
-    return 2;
+    return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
   }
   if (first == "--lmcode-signatures") {
-    if (argc != 2) { std::cerr << usage; return 2; }
-    for (const auto& s : reg.signatures()) std::cout << s << "\n";
+    if (argc != 2) return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
+    dslvm::Registry registry;
+    Host host;
+    register_torch(registry, host);
+    for (const auto& s : registry.signatures()) std::cout << s << "\n";
     return 0;
   }
-  if (first != "--lmcode" || argc < 3) { std::cerr << usage; return 2; }
-  for (int i = 2; i < argc; ++i) {
-    std::string a = argv[i];
-    if (a.empty() || a.rfind("--", 0) == 0) { std::cerr << usage; return 2; }
-  }
-  const std::string schema(reinterpret_cast<const char*>(embedded_dsl_schema), embedded_dsl_schema_size);
-  // Every file is read and verified before any chunk runs, so a bad later file never leaves a half-done run.
-  std::vector<dslvm::Program> programs;
-  for (int i = 2; i < argc; ++i) {
-    try {
-      programs.push_back(dslvm::Program::load(dslvm::read_file(argv[i]), schema, reg));
-    } catch (const dslvm::Error& e) {
-      return dslvm::report_error("load", dslvm::Error(e.code, std::string(argv[i]) + ": " + e.what()));
+  struct FileArg { std::string path; int priority; };
+  std::vector<FileArg> files;
+  for (int i = 1; i < argc;) {
+    const std::string option = argv[i++];
+    int priority = 1;
+    if (option == "--first") priority = 0;
+    else if (option == "--last") priority = 2;
+    else if (option != "--lmcode") return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
+    if (i >= argc || argv[i][0] == '\0' || argv[i][0] == '-') return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
+    files.push_back({argv[i++], priority});
+    // The direct host also accepts a run_lmcode command's repeated file tail:
+    // --lmcode one.dslb two.dslb. Builder role flags remain explicit pairs.
+    if (option == "--lmcode") {
+      while (i < argc && std::string(argv[i]).rfind("--", 0) != 0) files.push_back({argv[i++], 1});
     }
   }
-  dslvm::Context ctx;
-  ctx.set("torch", &host);
-  ctx.set("out", &host.out);
-  for (auto& program : programs) {
+  if (files.empty()) return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
+
+  std::vector<std::string> parsed_files;
+  std::vector<int> priorities;
+  parsed_files.reserve(files.size());
+  priorities.reserve(files.size());
+  for (const auto& file : files) { parsed_files.push_back(file.path); priorities.push_back(file.priority); }
+  std::optional<dslvm::InvocationResults> invocation;
+  try {
+    invocation.emplace(dslvm::InvocationResults::from_command(parsed_files));
+  } catch (const dslvm::Error& error) {
+    return dslvm::failure_frame("cli", error);
+  } catch (const std::exception&) {
+    return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", "lmcode invocation: invalid manifest"));
+  }
+  auto& results = *invocation;
+
+  const std::string schema(reinterpret_cast<const char*>(embedded_dsl_schema), embedded_dsl_schema_size);
+  dslvm::Registry registry;
+  Host host;
+  register_torch(registry, host);
+  const auto contract = dslvm::ResultContract::from_schema(schema);
+  // Verify every bytecode file before any Torch callback runs, preserving the no-partial-work load boundary.
+  std::vector<dslvm::Program> programs;
+  programs.reserve(parsed_files.size());
+  for (size_t i = 0; i < parsed_files.size(); ++i) {
+    try {
+      programs.push_back(dslvm::Program::load(dslvm::read_file(parsed_files[i]), schema, registry));
+    } catch (const dslvm::Error& e) {
+      results.fail(results.registrations()[i].index, "load", dslvm::Error(e.code, parsed_files[i] + ": " + e.what()));
+      return results.write_frame(std::cout);
+    } catch (const std::exception&) {
+      results.fail(results.registrations()[i].index, "load", dslvm::Error("LOAD_BAD_BYTECODE", "cannot read lmtorch bytecode"));
+      return results.write_frame(std::cout);
+    }
+  }
+  dslvm::Context context;
+  context.set("torch", &host);
+  context.set("out", &host.out);
+  context.set_dry(results.dry());
+  std::vector<size_t> execution_order;
+  execution_order.reserve(files.size());
+  for (size_t i = 0; i < files.size(); ++i) execution_order.push_back(i);
+  std::stable_sort(execution_order.begin(), execution_order.end(), [&](size_t a, size_t b) { return priorities[a] < priorities[b]; });
+  for (const size_t position : execution_order) {
+    const auto& part = results.registrations()[position];
+    auto& program = programs[position];
+    auto& result = results.select(part.index, registry, contract);
+    host.out.result = OJson::object();
     // Autograd recording is per file: torch.grad_enabled(false) in one file must not silently disable training in the next.
     at::GradMode::set_enabled(true);
     try {
-      program.run(ctx, reg);
+      program.run(context, registry);
     } catch (const dslvm::Error& e) {
-      return dslvm::report_error(e.code == "APP_FAIL" ? "app" : "run", e);
+      results.fail(part.index, e.code == "APP_FAIL" ? "app" : "run", e);
+      break;
     } catch (const std::exception& e) {
-      return dslvm::report_error("run", dslvm::Error("RUN_HOST", e.what()));
+      results.fail(part.index, "run", dslvm::Error("RUN_HOST", e.what()));
+      break;
     } catch (...) {
-      return dslvm::report_error("run", dslvm::Error("RUN_HOST", "unknown failure"));
+      results.fail(part.index, "run", dslvm::Error("RUN_HOST", "unknown failure"));
+      break;
+    }
+    try {
+      const std::string already_returned = result.json();
+      if (!host.out.result.empty()) {
+        const std::string encoded = host.out.result.dump();
+        dslvm::stdlib::json_detail::Parser parser(encoded);
+        auto node = parser.val();
+        parser.ws();
+        if (parser.p != encoded.size() || node.kind != dslvm::stdlib::JsonNode::Kind::Object)
+          throw dslvm::Error("RUN_HOST", "invalid lmtorch result JSON");
+        if (already_returned == "null") result.set(dslvm::Value::object("Json", &node));
+        else for (const auto& member : node.object)
+          result.put(member.key, dslvm::Value::object("Json", member.value.get()));
+      } else if (already_returned == "null") {
+        dslvm::stdlib::JsonNode empty;
+        empty.kind = dslvm::stdlib::JsonNode::Kind::Object;
+        result.set(dslvm::Value::object("Json", &empty));
+      }
+      results.complete(part.index);
+    } catch (const dslvm::Error& e) {
+      results.fail(part.index, "run", e);
+      break;
+    } catch (const std::exception& e) {
+      results.fail(part.index, "run", dslvm::Error("RUN_HOST", e.what()));
+      break;
     }
   }
-  return dslvm::report_ok(host.out.result.dump());
+  return results.write_frame(std::cout);
 }
 }  // namespace lmtorch::dsl

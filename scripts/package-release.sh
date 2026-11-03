@@ -24,7 +24,6 @@ esac
 cp "$HERE/LICENSE" "$HERE/THIRD_PARTY_NOTICES.md" "$dir/"
 cp "$LICENSES"/* "$HERE/third_party/dslvm/LICENSE" "$dir/licenses/" 2>/dev/null
 mv "$dir/licenses/LICENSE" "$dir/licenses/lmcode-cpp-LICENSE"
-cp "$(dirname "$(dirname "$BIN")")/lmcpp-src/LICENSE" "$dir/licenses/lmcpp-LICENSE"
 if [ "$OS" = windows ]; then
   archive="$name.zip"
   py="$(command -v python3 || command -v python)"
