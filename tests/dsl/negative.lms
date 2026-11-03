@@ -21,7 +21,7 @@ fn run_program(program) {
   return {code: code, line: r};
 }
 fn run_two(first, second) {
-  invocation = lmcode_build(HOST_SCHEMA);
+  invocation = lmcode_build([BIN, "--lmcode"]);
   invocation.add(first);
   invocation.add(second);
   r = run_lmcode(invocation);
@@ -63,7 +63,7 @@ expect("schema bytes differ", {code: (mismatch_result.ok ? 0 : 3), line: mismatc
 writes = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.write_text("side-effect.txt", "ran");
 end _lmcode_
-bad_later = lmcode_build(HOST_SCHEMA);
+bad_later = lmcode_build([BIN, "--lmcode"]);
 bad_later.add(writes);
 bad_later.add(mismatch);
 bad_later_result = run_lmcode(bad_later);
