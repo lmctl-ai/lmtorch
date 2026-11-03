@@ -1030,10 +1030,14 @@ int run(int argc, char** argv) {
       std::ostringstream raw;
       raw << input.rdbuf();
       if (input.bad()) throw;
-      OJson metadata = OJson::parse(raw.str());
+      const std::string original = raw.str();
+      OJson metadata = OJson::parse(original);
       if (!metadata.is_object() || metadata.contains("dry")) throw;
-      metadata["dry"] = false;
-      invocation.emplace(dslvm::InvocationResults::from_metadata(metadata.dump(), parsed_files));
+      const size_t close = original.find_last_not_of(" \t\r\n");
+      if (close == std::string::npos || original[close] != '}') throw;
+      std::string normalized = original;
+      normalized.insert(close, metadata.empty() ? "\"dry\":false" : ",\"dry\":false");
+      invocation.emplace(dslvm::InvocationResults::from_metadata(normalized, parsed_files));
     }
   } catch (const dslvm::Error& error) {
     return dslvm::failure_frame("cli", error);
