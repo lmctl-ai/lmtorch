@@ -36,6 +36,15 @@ if "find_package(lmcpp" in cmake or "LMCPP_SOURCE_DIR" in cmake:
 main = text("src/main.cpp") or ""
 if any(token in main for token in ("make_lmtorch_spec", "lmcpp::run_cli", "--cli-schema")):
     failures.append("main.cpp still exposes the legacy lmapi CLI")
+if "lmapi" in main.lower():
+    failures.append("main.cpp still describes or dispatches an lmapi surface")
+
+host = text("src/dsl_host.cpp") or ""
+for token in ("InvocationResults::from_command", "results.select(", "context.set_dry(results.dry())", "results.write_frame(std::cout)"):
+    if token not in host:
+        failures.append(f"lmcode host is missing invocation protocol step: {token}")
+if "dslvm::report_ok" in host or "dslvm::report_error" in host:
+    failures.append("lmcode host still emits the legacy unframed result protocol")
 
 workflow = text(".github/workflows/ci.yml") or ""
 if "repository: lmctl-ai/lmcpp" in workflow or "LMCPP_REF" in workflow:
@@ -49,6 +58,8 @@ if "repo=https://github.com/lmctl-ai/lmcode-cpp\n" not in lock or not commit:
 test_script = text("test.sh") or ""
 if '"$BIN" --schema' in test_script or '"$BIN" tensor_' in test_script or "--cli-schema" in test_script:
     failures.append("test.sh still invokes the retired lmapi CLI")
+if "check-sdk-cutover.py" not in test_script:
+    failures.append("test.sh does not run the legacy SDK cutover negative controls")
 
 if failures:
     print("FAIL legacy SDK cutover controls:")
