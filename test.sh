@@ -34,7 +34,7 @@ pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -x "$BIN" ] || fail "no binary at $BIN (scripts/build-native.sh [--dev])"
-[ -n "$LMSCRIPT" ] || fail "lmscript not found (>= 0.2.450 required), or set LMSCRIPT_BIN"
+[ -n "$LMSCRIPT" ] || fail "current lmscript compiler not found, or set LMSCRIPT_BIN"
 # Schema-module imports and the examples' cli="lmtorch" blocks find lmtorch by name, so the binary under test is first on
 # PATH; install= must then never download. An empty private tool cache proves it after the examples (below).
 [ "$(basename "$BIN")" = "lmtorch$EXE" ] || fail "LMTORCH_BIN must be named lmtorch$EXE (cli=\"lmtorch\" looks it up on PATH): $BIN"
@@ -90,6 +90,8 @@ done < <("$BIN" --lmcode-signatures)
 [ "$missing" = 0 ] || fail "--lmcode-schema summary is missing $missing members"
 ok "--lmcode-schema summary lists every member"
 ok "host flag standard exposes only lmcode schema/signatures and version"
+"$SYS_PYTHON" tests/check-unbounded-artifacts.py "$BIN" "$LMSCRIPT_PY" || fail "implicit artifact/text bounds"
+ok "headers, artifacts, tensor ranks and text inputs have no implicit size ceilings"
 want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)"
 [ "$("$BIN" --version)" = "$want" ] || fail "--version: '$("$BIN" --version)' (want '$want')"
 set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
@@ -216,7 +218,8 @@ for f in examples/*.lms; do
   "$LMSCRIPT" --check "$f" >/dev/null || fail "lmscript --check $f"
 done
 ok "every example passes lmscript --check"
-[ ! -e "$WORK/tool-cache" ] || fail "an example downloaded a release instead of using the binary under test: $(find "$WORK/tool-cache" -type f)"
+"$SYS_PYTHON" tests/test_tool_cache.py || fail "local tool-cache guard controls"
+"$SYS_PYTHON" tests/tool_cache.py "$WORK/tool-cache" "$HERE_N/schema/lmtorch.dsl.json" || fail "examples downloaded a tool or cached a different host schema"
 ok "examples use the binary under test and github: imports did not download another release"
 
 if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, numpy' 2>/dev/null; then

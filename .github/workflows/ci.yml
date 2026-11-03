@@ -32,7 +32,7 @@ permissions:
   contents: read
 
 env:
-  LMCTL_VERSION: 0.2.450   # lmscript with lmcode bytecode v6 and the run_lmcode invocation manifest
+  LMCTL_VERSION: latest   # qualify the current compiler; log its concrete version below
 
 jobs:
   plan:
@@ -125,6 +125,7 @@ jobs:
       - name: lmscript compiler
         run: |
           npm install --prefix "$RUNNER_TEMP/lmctl" "@lmctl-ai/lmctl@${LMCTL_VERSION}"
+          node -e 'console.log("qualified compiler", require(process.argv[1]).version)' "$RUNNER_TEMP/lmctl/node_modules/@lmctl-ai/lmctl/package.json"
           echo "$RUNNER_TEMP/lmctl/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Secrets scan
         run: python3 lmtorch/scripts/no-secrets.py

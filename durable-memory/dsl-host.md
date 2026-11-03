@@ -4,7 +4,7 @@
 
 `lmtorch` exposes one native host surface: `--lmcode`, `--lmcode-schema`, and `--lmcode-signatures`. The C++ host vendors
 lmcode-cpp at the full reviewed SHA in `sdk.lock`, consumes invocation manifest v1 with `InvocationResults`, propagates
-the manifest dry flag to its VM context, accepts the compiler's omitted dry field as false for older `cli=` producers, and emits the terminal `LMCODE_RETURN` frame. Its public filesystem work
+the required boolean manifest dry flag to its VM context, refuses missing/nonboolean dry before dispatch, and emits the terminal `LMCODE_RETURN` frame. Its public filesystem work
 remains contained to the invocation directory. CMake, public headers, build scripts and CI no longer depend on the former
 command SDK. See `docs/parity.md` and `durable-memory/testing.md` for the active contract.
 
@@ -69,4 +69,4 @@ against that schema; `run_lmcode` compiles and invokes the host with manifest v1
 
 ## Hard host flag cutover
 
-WP175 removed the lmcpp/lmapi implementation and retained only the lmcode host protocol. The vendored SDK revision and file hashes are recorded in `sdk.lock`; `scripts/sync-sdk.sh --verify` checks them. `test.sh` validates manifest v1, dry and real effects, result frames, schema discovery, examples, and CPU numerical oracles when available. Local native qualification is unavailable without Torch and nlohmann headers; the CI matrix remains the native build gate.
+WP175 removed the lmcpp/lmapi implementation and retained only the lmcode host protocol. The vendored SDK revision and file hashes are recorded in `sdk.lock`; `scripts/sync-sdk.sh --verify` checks them. `test.sh` validates manifest v1, dry and real effects, result frames, schema discovery, examples, and CPU numerical oracles when available. Development CPU qualification requires Torch and nlohmann headers; the CI matrix remains the cross-platform native gate. The host adds no byte/rank ceilings to valid artifacts or text; format/overflow checks remain.

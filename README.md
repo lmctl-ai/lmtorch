@@ -93,3 +93,5 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled components and 
 [MIT](LICENSE). Maintained by Lattice Systems LLC.
 
 The native host runs bytecode with `--lmcode FILE`; discovery uses `--lmcode-schema --json` and `--lmcode-signatures`. Retired host flag spellings are rejected. Internal DSLB magic and `.dslb` artifacts keep their names.
+
+Invocation metadata requires a boolean `dry`; missing or nonboolean values fail with exit 2 before host work. Use a current lmctl/lmscript compiler. Valid artifacts, headers and text have no application-defined size ceiling; format and integer-overflow checks still apply. See [the native test gate](durable-memory/testing.md) for CPU and platform qualification.
