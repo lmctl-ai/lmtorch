@@ -224,12 +224,12 @@ fails_at("int division by zero (VM error)", p, 221, 3, "run", "RUN_ERROR", "int 
 p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.check(torch.ones(2).sum().item() == 3.0, "two ones make three");
 end _lmcode_
-fails_at("out.check", p, 208, 4, "app", "APP_FAIL", "check failed: two ones make three");
+fails_at("out.check", p, 225, 4, "app", "APP_FAIL", "check failed: two ones make three");
 p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 out.set("before", 1);
 out.fail("stop here");
 end _lmcode_
-fails_at("out.fail", p, 213, 4, "app", "APP_FAIL", "stop here");
+fails_at("out.fail", p, 230, 4, "app", "APP_FAIL", "stop here");
 
 # ---- regressions from the second bug-hunting round (2026-10-20)
 p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
