@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <limits>
 #ifdef _WIN32
 #include <process.h>
 #define getpid _getpid
@@ -40,5 +41,18 @@ int main(){try { std::filesystem::current_path(std::filesystem::temp_directory_p
   auto trailing=artifact("lmtorch-trailing",R"({"tensor":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}})","12345678");assert(throws_tool([&]{read_tensor({trailing,"tensor"});},"INVALID_OFFSETS"));std::filesystem::remove(trailing);
   std::string boolbytes("\x00\x01\x02",3);auto badbool=artifact("lmtorch-badbool",R"({"tensor":{"dtype":"BOOL","shape":[3],"data_offsets":[0,3]}})",boolbytes);assert(throws_tool([&]{read_tensor({badbool,"tensor"});},"INVALID_ARTIFACT"));std::filesystem::remove(badbool);
   auto goodbool=artifact("lmtorch-goodbool",R"({"tensor":{"dtype":"BOOL","shape":[2],"data_offsets":[0,2]}})",std::string("\x00\x01",2));assert(read_tensor({goodbool,"tensor"}).bytes==std::vector<uint8_t>({0,1}));std::filesystem::remove(goodbool);
+  // Valid headers and ranks have no application-defined size ceiling.
+  TensorBundle wide; wide.tensors.emplace("tensor", t); wide.metadata.emplace("padding", std::string(1024*1024+1, 'x'));
+  auto wide_path=fresh("lmtorch-wide-header"); write_bundle(wide_path,wide); assert(read_bundle(wide_path).metadata==wide.metadata); std::filesystem::remove(wide_path);
+  TensorData ranked{"F32",std::vector<int64_t>(33,1),std::vector<uint8_t>(4)};
+  auto rank_path=fresh("lmtorch-wide-rank"); write_tensor(rank_path,ranked); assert(read_tensor({rank_path,"tensor"}).shape==ranked.shape); std::filesystem::remove(rank_path);
+  // Format arithmetic still rejects overflow and impossible declared headers before allocation or writes.
+  auto overflow_path=fresh("lmtorch-overflow");
+  TensorData overflow{"F64",{std::numeric_limits<int64_t>::max(),std::numeric_limits<int64_t>::max()}, {}};
+  assert(throws_tool([&]{write_tensor(overflow_path,overflow);},"INVALID_SHAPE")); assert(!std::filesystem::exists(overflow_path));
+  TensorData byte_overflow{"F64",{int64_t(1)<<61},{}};
+  assert(throws_tool([&]{write_tensor(overflow_path,byte_overflow);},"INVALID_TENSOR")); assert(!std::filesystem::exists(overflow_path));
+  auto impossible=fresh("lmtorch-impossible-header"); {std::ofstream f(impossible,std::ios::binary);for(int i=0;i<8;++i)f.put(char(255));}
+  assert(throws_tool([&]{read_bundle(impossible);},"INVALID_HEADER")); std::filesystem::remove(impossible);
   } catch (const Error& e) { fprintf(stderr, "lmtorch error: %s data=%s\n", e.what(), e.data.dump().c_str()); return 1; }
 }

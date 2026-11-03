@@ -20,6 +20,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -92,15 +93,18 @@ std::string shape_text(const torch::Tensor& t) {
   for (int64_t i = 0; i < t.dim(); ++i) s += (i ? ", " : "") + std::to_string(t.size(i));
   return s + "]";
 }
-constexpr int64_t kMaxElements = int64_t(1) << 31;
 std::vector<int64_t> dims_of(const Args& a, size_t from, size_t count, const char* who) {
   std::vector<int64_t> d;
-  int64_t n = 1;
   for (size_t i = from; i < from + count; ++i) {
     if (a[i].i < 0) fail(std::string(who) + ": dimensions must be nonnegative; found " + std::to_string(a[i].i));
-    if (a[i].i > 0 && n > kMaxElements / a[i].i) fail(std::string(who) + ": tensor exceeds 2^31 elements");
-    n *= std::max<int64_t>(a[i].i, 1);
     d.push_back(a[i].i);
+  }
+  if (std::find(d.begin(), d.end(), 0) == d.end()) {
+    int64_t n = 1;
+    for (int64_t size : d) {
+      if (n > std::numeric_limits<int64_t>::max() / size) fail(std::string(who) + ": tensor element count overflows");
+      n *= size;
+    }
   }
   return d;
 }
@@ -145,7 +149,6 @@ std::string read_text(const std::string& path) {
   lmtorch::check_contained(path);
   std::error_code ec;
   if (!std::filesystem::is_regular_file(path, ec)) fail("cannot read " + path);
-  if (std::filesystem::file_size(path, ec) > (uint64_t(256) << 20)) fail("cannot read " + path + ": larger than 256 MiB");
   std::ifstream in(path, std::ios::binary);
   std::ostringstream data;
   data << in.rdbuf();
@@ -331,13 +334,13 @@ std::string add_layer(ModelBox& m, const std::string& kind, const std::vector<in
   static const std::set<std::string> known = {"linear", "conv2d", "max_pool2d", "layer_norm", "softmax", "log_softmax", "leaky_relu", "dropout", "flatten", "relu", "tanh", "sigmoid", "gelu"};
   if (!known.count(kind)) fail("unknown layer '" + kind + "'");
   auto need = [&](size_t count) { if (n.size() != count) fail("layer " + kind + " expects " + std::to_string(count) + " integer argument(s)"); };
-  auto positive = [](int64_t v, const char* what) { if (v < 1 || v > 1000000) fail(std::string(what) + " must be between 1 and 1000000"); return v; };
+  auto positive = [](int64_t v, const char* what) { if (v < 1) fail(std::string(what) + " must be positive"); return v; };
   auto ints = [&](size_t count) { std::string s; for (size_t i = 0; i < count; ++i) s += (i ? ", " : "") + std::to_string(n[i]); return s; };
   if (kind == "linear") { need(2); m.seq->push_back(torch::nn::Linear(positive(n[0], "linear in_features"), positive(n[1], "linear out_features"))); return "linear(" + ints(2) + ")"; }
   if (kind == "conv2d") {
     if (n.size() == 3) { m.seq->push_back(torch::nn::Conv2d(torch::nn::Conv2dOptions(positive(n[0], "conv2d in_channels"), positive(n[1], "conv2d out_channels"), positive(n[2], "conv2d kernel")))); return "conv2d(" + ints(3) + ")"; }
     need(5);
-    if (n[4] < 0 || n[4] > 1000) fail("conv2d padding must be between 0 and 1000");
+    if (n[4] < 0) fail("conv2d padding must be nonnegative");
     m.seq->push_back(torch::nn::Conv2d(torch::nn::Conv2dOptions(positive(n[0], "conv2d in_channels"), positive(n[1], "conv2d out_channels"), positive(n[2], "conv2d kernel")).stride(positive(n[3], "conv2d stride")).padding(n[4])));
     return "conv2d(" + ints(5) + ")";
   }
@@ -403,13 +406,7 @@ void replay_layers(ModelBox& m, const std::string& spec, const std::string& wher
     pos = next + 4;
   }
 }
-std::string first_line(std::string m) {
-  auto pos = m.find('\n');
-  if (pos != std::string::npos) m.resize(pos);
-  if (m.size() > 300) m.resize(300);
-  return m;
-}
-// Every entry checks its argument kinds (the VM does not) and maps libtorch and C++ exceptions to one-line host errors.
+// Every entry checks its argument kinds (the VM does not) and maps libtorch and C++ exceptions to framed host errors without libtorch backtraces.
 void method(dslvm::Registry& r, const std::string& type, const std::string& name, std::vector<std::string> params, std::string ret, dslvm::Method fn) {
   std::string who = type + "." + name;
   r.method(type, name, params, ret, [params, fn, who](void* obj, Args& a) {
@@ -418,10 +415,10 @@ void method(dslvm::Registry& r, const std::string& type, const std::string& name
       if (!kind_ok(params[i], a[i])) fail(who + " argument " + std::to_string(i + 1) + " must be " + params[i]);
     try { return fn(obj, a); }
     catch (const dslvm::Error&) { throw; }
-    catch (const c10::Error& e) { fail(who + ": " + first_line(e.what_without_backtrace())); }
+    catch (const c10::Error& e) { fail(who + ": " + e.what_without_backtrace()); }
     catch (const lmtorch::Error& e) { fail(who + ": " + e.what()); }
     catch (const std::bad_alloc&) { fail(who + ": out of memory"); }
-    catch (const std::exception& e) { fail(who + ": " + first_line(e.what())); }
+    catch (const std::exception& e) { fail(who + ": " + e.what()); }
     catch (...) { fail(who + ": unknown failure"); }
   });
 }
@@ -487,26 +484,26 @@ void register_torch(dslvm::Registry& r, Host& h) {
     });
   }
   method(r, "Torch", "randperm", {"int"}, "Tensor", [tensor_ret](void*, Args& a) {
-    if (a[0].i < 0 || a[0].i > kMaxElements) fail("randperm size must be between 0 and 2^31");
+    if (a[0].i < 0) fail("randperm size must be nonnegative");
     return tensor_ret(torch::randperm(a[0].i, torch::kInt64));
   });
   method(r, "Torch", "arange", {"int"}, "Tensor", [tensor_ret](void*, Args& a) {
-    if (a[0].i < 0 || a[0].i > kMaxElements) fail("arange end must be between 0 and 2^31");
+    if (a[0].i < 0) fail("arange end must be nonnegative");
     return tensor_ret(torch::arange(a[0].i, torch::kInt64));
   });
   method(r, "Torch", "arange", {"float", "float", "float"}, "Tensor", [tensor_ret](void*, Args& a) {
     for (int i = 0; i < 3; ++i) finite(a[i].f, "arange argument");
     if (a[2].f == 0) fail("arange step must not be zero");
-    if ((a[1].f - a[0].f) / a[2].f > double(kMaxElements)) fail("arange exceeds 2^31 elements");
     return tensor_ret(torch::arange(a[0].f, a[1].f, a[2].f, torch::kFloat32));
   });
   method(r, "Torch", "linspace", {"float", "float", "int"}, "Tensor", [tensor_ret](void*, Args& a) {
     finite(a[0].f, "linspace start"); finite(a[1].f, "linspace end");
-    if (a[2].i < 0 || a[2].i > kMaxElements) fail("linspace steps must be between 0 and 2^31");
+    if (a[2].i < 0) fail("linspace steps must be nonnegative");
     return tensor_ret(torch::linspace(a[0].f, a[1].f, a[2].i, torch::kFloat32));
   });
   method(r, "Torch", "eye", {"int"}, "Tensor", [tensor_ret](void*, Args& a) {
-    if (a[0].i < 0 || a[0].i > 46340) fail("eye size must be between 0 and 46340");
+    if (a[0].i < 0) fail("eye size must be nonnegative");
+    if (a[0].i != 0 && a[0].i > std::numeric_limits<int64_t>::max() / a[0].i) fail("eye element count overflows");
     return tensor_ret(torch::eye(a[0].i));
   });
   method(r, "Torch", "scalar", {"float"}, "Tensor", [tensor_ret](void*, Args& a) { return tensor_ret(torch::scalar_tensor(a[0].f, torch::kFloat32)); });
@@ -910,7 +907,6 @@ void register_torch(dslvm::Registry& r, Host& h) {
   method(r, "Out", "set", {"string", "string"}, "Out", [key_ok](void* p, Args& a) { self<Out>(p)->result[key_ok(a[0].s)] = a[1].s; return Value::object("Out", p); });
   method(r, "Out", "set", {"string", "bool"}, "Out", [key_ok](void* p, Args& a) { self<Out>(p)->result[key_ok(a[0].s)] = a[1].b; return Value::object("Out", p); });
   method(r, "Out", "set", {"string", "Tensor"}, "Out", [key_ok](void* p, Args& a) {
-    if (T(a[1]).numel() > 1000000) fail("out.set: tensor has more than 1000000 elements; save it to a file instead");
     self<Out>(p)->result[key_ok(a[0].s)] = OJson::parse(tensor_text(T(a[1]), true));
     return Value::object("Out", p);
   });
@@ -951,18 +947,6 @@ void print_summary(dslvm::Registry& reg) {
   for (const auto& f : functions) std::cout << "  " << f << "\n";
 }
 }  // namespace
-
-std::optional<std::string> invocation_manifest_path() {
-#ifdef _WIN32
-  const wchar_t* value = _wgetenv(L"LMCODE_INVOCATION_FILE");
-  if (!value) return std::nullopt;
-  const auto bytes = std::filesystem::path(value).u8string();
-  return std::string(bytes.begin(), bytes.end());
-#else
-  const char* value = std::getenv("LMCODE_INVOCATION_FILE");
-  return value ? std::optional<std::string>(value) : std::nullopt;
-#endif
-}
 
 int run(int argc, char** argv) {
   const std::string usage = "usage: lmtorch --version | --lmcode-schema [--json] | --lmcode-signatures | --lmcode FILE.dslb [--first FILE.dslb] [--last FILE.dslb]\n";
@@ -1015,30 +999,7 @@ int run(int argc, char** argv) {
   for (const auto& file : files) { parsed_files.push_back(file.path); priorities.push_back(file.priority); }
   std::optional<dslvm::InvocationResults> invocation;
   try {
-    try {
-      invocation.emplace(dslvm::InvocationResults::from_command(parsed_files));
-    } catch (const dslvm::Error& error) {
-      // lmscript 0.2.450 omits `dry` from default cli= invocations. Treat only that absent field as false;
-      // explicit malformed values still go through the pinned SDK validator and remain CLI errors.
-      const auto manifest_path = invocation_manifest_path();
-      if (error.code != "CLI_USAGE" || error.message != "lmcode invocation: dry must be boolean" || !manifest_path)
-        throw;
-      const auto path = std::filesystem::u8path(*manifest_path);
-      if (manifest_path->empty() || manifest_path->find('\0') != std::string::npos || !path.is_absolute()) throw;
-      std::ifstream input(path, std::ios::binary);
-      if (!input) throw;
-      std::ostringstream raw;
-      raw << input.rdbuf();
-      if (input.bad()) throw;
-      const std::string original = raw.str();
-      OJson metadata = OJson::parse(original);
-      if (!metadata.is_object() || metadata.contains("dry")) throw;
-      const size_t close = original.find_last_not_of(" \t\r\n");
-      if (close == std::string::npos || original[close] != '}') throw;
-      std::string normalized = original;
-      normalized.insert(close, metadata.empty() ? "\"dry\":false" : ",\"dry\":false");
-      invocation.emplace(dslvm::InvocationResults::from_metadata(normalized, parsed_files));
-    }
+    invocation.emplace(dslvm::InvocationResults::from_command(parsed_files));
   } catch (const dslvm::Error& error) {
     return dslvm::failure_frame("cli", error);
   } catch (const std::exception&) {

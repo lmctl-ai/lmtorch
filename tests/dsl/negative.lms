@@ -157,9 +157,9 @@ let v = torch.zeros(-1);
 end _lmcode_
 fails_at("negative dimension", p, 156, 3, "run", "RUN_HOST", "dimensions must be nonnegative");
 p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
-let v = torch.zeros(65536, 65536);
+let v = torch.zeros(4294967296, 4294967296);
 end _lmcode_
-fails_at("oversized tensor", p, 160, 3, "run", "RUN_HOST", "exceeds 2^31 elements");
+fails_at("tensor element count overflow", p, 160, 3, "run", "RUN_HOST", "tensor element count overflows");
 p = _lmcode_ schema="../../schema/lmtorch.dsl.json";
 let w = torch.where(torch.ones(2), torch.ones(2), torch.ones(2));
 end _lmcode_
