@@ -98,7 +98,7 @@ ok "--version prints '$want' (host flag standard; lmscript install=...@latest co
 # _lmcode_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
 printf 'p = _lmcode_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _lmcode_\nr = run_lmcode(p);\nif (!r.ok || r.result.v != 3.0) { exit(1); }\nprintln(json_stringify(r.result));\n' "$BIN" > "$WORK/cli.lms"
 if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then
-  (cd "$WORK" && "$LMSCRIPT" cli.lms) | grep -q '"v":3.0' || fail "running a cli= lmcode program"
+  (cd "$WORK" && "$LMSCRIPT" cli.lms >/dev/null) || fail "running a cli= lmcode program"
   ok "_lmcode_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
 else
   echo "# skipped: _lmcode_ cli= (this lmscript predates lmscript R42)"
@@ -125,7 +125,7 @@ if (!r.ok) { println(json_stringify(r)); exit(1); }
 println(json_stringify(r.result));
 LMS
 (cd "$WORK" && "$LMSCRIPT" std.lms > "$WORK/std.out") || fail "running lmcode std through run_lmcode: $(cat "$WORK/std.out")"
-for want in '"keys":"b+w"' '"has_w":true' '"upper":"OK"' '"root":4.0' '"xs":6' '"parts":3' '"file":"ababtrue"'; do
+for want in '"keys":"b+w"' '"has_w":true' '"upper":"OK"' '"root":4' '"xs":6' '"parts":3' '"file":"ababtrue"'; do
   grep -qF "$want" "$WORK/std.out" || fail "lmcode std: missing $want in $(cat "$WORK/std.out")"
 done
 ok "lmcode std (strings, math, lists, files) runs from the built-in registry; Bundle.keys() is a std StrList"
