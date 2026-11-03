@@ -22,7 +22,10 @@ host, mode, *args = sys.argv[1:]
 manifest_path = Path(os.environ["LMCODE_INVOCATION_FILE"])
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 assert manifest["version"] == 1 and manifest["mode"] == "single"
-manifest["dry"] = mode == "dry"
+if mode == "legacy":
+    manifest.pop("dry", None)
+else:
+    manifest["dry"] = mode == "dry"
 controlled_manifest = Path.cwd() / (mode + "-invocation.json")
 controlled_manifest.write_text(json.dumps(manifest), encoding="utf-8")
 env = os.environ.copy()
@@ -61,7 +64,9 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-invocation-") as scratch:
         'dry = run_lmcode(p, {command: [PYTHON, WRAPPER, BIN, "dry", "--lmcode", "$DSLFILE"]});\n'
         'write_file("dry-result.json", json_stringify(dry));\n'
         'real = run_lmcode(p, {command: [PYTHON, WRAPPER, BIN, "real", "--lmcode", "$DSLFILE"]});\n'
-        'write_file("real-result.json", json_stringify(real));\n',
+        'write_file("real-result.json", json_stringify(real));\n'
+        'legacy = run_lmcode(p, {command: [PYTHON, WRAPPER, BIN, "legacy", "--lmcode", "$DSLFILE"]});\n'
+        'write_file("legacy-result.json", json_stringify(legacy));\n',
         encoding="utf-8",
     )
     env = dict(os.environ)
@@ -88,4 +93,10 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-invocation-") as scratch:
     assert (work / "real-work" / "manifest-sentinel.txt").read_text(encoding="utf-8") == "real effect"
     assert (work / "real-work" / "manifest-tensor.safetensors").is_file()
 
-print("PASS run_lmcode manifest v1, dry/real effects and terminal return frames")
+    legacy_result = json.loads((work / "legacy-result.json").read_text(encoding="utf-8"))
+    legacy_frame = json.loads((work / "legacy-frame.json").read_text(encoding="utf-8"))
+    assert legacy_result == {"ok": True, "result": {"marker": "real"}}, legacy_result
+    assert legacy_frame == {"ok": True, "result": {"marker": "real"}}, legacy_frame
+    assert (work / "legacy-work" / "manifest-sentinel.txt").read_text(encoding="utf-8") == "real effect"
+
+print("PASS run_lmcode manifest v1, optional false dry compatibility, dry/real effects and terminal frames")

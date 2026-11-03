@@ -4,7 +4,7 @@
 
 `lmtorch` exposes one native host surface: `--lmcode`, `--lmcode-schema`, and `--lmcode-signatures`. The C++ host vendors
 lmcode-cpp at the full reviewed SHA in `sdk.lock`, consumes invocation manifest v1 with `InvocationResults`, propagates
-the manifest dry flag to its VM context, and emits the terminal `LMCODE_RETURN` frame. Its public filesystem work
+the manifest dry flag to its VM context, accepts the compiler's omitted dry field as false for older `cli=` producers, and emits the terminal `LMCODE_RETURN` frame. Its public filesystem work
 remains contained to the invocation directory. CMake, public headers, build scripts and CI no longer depend on the former
 command SDK. See `docs/parity.md` and `durable-memory/testing.md` for the active contract.
 

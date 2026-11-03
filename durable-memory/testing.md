@@ -9,7 +9,7 @@ The gate checks:
 2. The embedded host schema matches `schema/lmtorch.dsl.json`, the compiler and registry signatures agree, and the
    host-flag negative controls reject retired options before effects.
 3. Invocation manifest v1 and the terminal return frame work through both direct host calls and `run_lmcode`. Dry-mode
-   controls assert no sentinel file or safetensors artifact is created, while real-mode controls assert those effects.
+   controls assert no sentinel file or safetensors artifact is created, while real-mode controls assert those effects; an omitted dry field defaults to real mode for older `cli=` producers.
 4. C++ safetensors unit vectors cover round trips, atomic no-replace writes, permissions, malformed headers, BOOL data,
    offset/length bounds and duplicate keys.
 5. `tests/dsl/api.lms` checks the Torch, Tensor, Bundle, Model, Optimizer and Out host surface. `tests/dsl/negative.lms`

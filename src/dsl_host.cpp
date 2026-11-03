@@ -13,12 +13,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #ifndef _WIN32
@@ -950,6 +952,18 @@ void print_summary(dslvm::Registry& reg) {
 }
 }  // namespace
 
+std::optional<std::string> invocation_manifest_path() {
+#ifdef _WIN32
+  const wchar_t* value = _wgetenv(L"LMCODE_INVOCATION_FILE");
+  if (!value) return std::nullopt;
+  const auto bytes = std::filesystem::path(value).u8string();
+  return std::string(bytes.begin(), bytes.end());
+#else
+  const char* value = std::getenv("LMCODE_INVOCATION_FILE");
+  return value ? std::optional<std::string>(value) : std::nullopt;
+#endif
+}
+
 int run(int argc, char** argv) {
   const std::string usage = "usage: lmtorch --version | --lmcode-schema [--json] | --lmcode-signatures | --lmcode FILE.dslb [--first FILE.dslb] [--last FILE.dslb]\n";
   if (argc < 2) return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", usage));
@@ -1001,7 +1015,26 @@ int run(int argc, char** argv) {
   for (const auto& file : files) { parsed_files.push_back(file.path); priorities.push_back(file.priority); }
   std::optional<dslvm::InvocationResults> invocation;
   try {
-    invocation.emplace(dslvm::InvocationResults::from_command(parsed_files));
+    try {
+      invocation.emplace(dslvm::InvocationResults::from_command(parsed_files));
+    } catch (const dslvm::Error& error) {
+      // lmscript 0.2.450 omits `dry` from default cli= invocations. Treat only that absent field as false;
+      // explicit malformed values still go through the pinned SDK validator and remain CLI errors.
+      const auto manifest_path = invocation_manifest_path();
+      if (error.code != "CLI_USAGE" || error.message != "lmcode invocation: dry must be boolean" || !manifest_path)
+        throw;
+      const auto path = std::filesystem::u8path(*manifest_path);
+      if (manifest_path->empty() || manifest_path->find('\0') != std::string::npos || !path.is_absolute()) throw;
+      std::ifstream input(path, std::ios::binary);
+      if (!input) throw;
+      std::ostringstream raw;
+      raw << input.rdbuf();
+      if (input.bad()) throw;
+      OJson metadata = OJson::parse(raw.str());
+      if (!metadata.is_object() || metadata.contains("dry")) throw;
+      metadata["dry"] = false;
+      invocation.emplace(dslvm::InvocationResults::from_metadata(metadata.dump(), parsed_files));
+    }
   } catch (const dslvm::Error& error) {
     return dslvm::failure_frame("cli", error);
   } catch (const std::exception&) {
