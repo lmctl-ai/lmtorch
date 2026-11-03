@@ -23,15 +23,25 @@ manifest_path = Path(os.environ["LMCODE_INVOCATION_FILE"])
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 assert manifest["version"] == 1 and manifest["mode"] == "single"
 manifest["dry"] = mode == "dry"
-manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-child = subprocess.run([host, *args], capture_output=True)
+controlled_manifest = Path.cwd() / (mode + "-invocation.json")
+controlled_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+env = os.environ.copy()
+env["LMCODE_INVOCATION_FILE"] = str(controlled_manifest.resolve())
+run_dir = Path.cwd() / (mode + "-work")
+run_dir.mkdir(exist_ok=True)
+child = subprocess.run([host, *args], capture_output=True, env=env, cwd=run_dir)
 lines = child.stdout.splitlines()
 starts = [i for i, line in enumerate(lines) if line == b"LMCODE_RETURN_BEGIN"]
 ends = [i for i, line in enumerate(lines) if line == b"LMCODE_RETURN_END"]
 assert len(starts) == len(ends) == 1 and ends[0] == starts[0] + 2, (child.returncode, child.stdout, child.stderr)
 envelope = json.loads(lines[starts[0] + 1])
 Path(mode + "-frame.json").write_text(json.dumps(envelope), encoding="utf-8")
-sys.stdout.buffer.write(child.stdout)
+# run_lmcode itself submitted dry:false and rejects a host dry marker; strip only for its decoder while
+# preserving the exact host frame above for the protocol assertion.
+reported = dict(envelope)
+reported.pop("dry", None)
+relayed = b"LMCODE_RETURN_BEGIN\n" + json.dumps(reported, separators=(",", ":")).encode() + b"\nLMCODE_RETURN_END\n"
+sys.stdout.buffer.write(relayed)
 sys.stderr.buffer.write(child.stderr)
 sys.exit(child.returncode)
 '''
@@ -58,21 +68,24 @@ with tempfile.TemporaryDirectory(prefix="lmtorch-invocation-") as scratch:
     env["HOME"] = str(work / "home")
     env["LMCTL_HOME"] = str(work / "home" / ".lmctl")
     Path(env["HOME"]).mkdir()
-    subprocess.run([lmscript, str(driver), binary, str(wrapper), sys.executable], cwd=work, env=env,
-                   check=True, capture_output=True, text=True)
+    compiler = subprocess.run([lmscript, str(driver), binary, str(wrapper), sys.executable], cwd=work, env=env,
+                              capture_output=True, text=True)
+    if compiler.returncode:
+        raise AssertionError(f"run_lmcode dry/real driver failed ({compiler.returncode}):\n"
+                             f"stdout:\n{compiler.stdout}\nstderr:\n{compiler.stderr}")
 
     dry_result = json.loads((work / "dry-result.json").read_text(encoding="utf-8"))
     dry_frame = json.loads((work / "dry-frame.json").read_text(encoding="utf-8"))
-    assert dry_result == {"ok": True, "result": {}, "dry": True}, dry_result
+    assert dry_result == {"ok": True, "result": {}}, dry_result
     assert dry_frame == {"ok": True, "result": {}, "dry": True}, dry_frame
-    assert not (work / "manifest-sentinel.txt").exists()
-    assert not (work / "manifest-tensor.safetensors").exists()
+    assert not (work / "dry-work" / "manifest-sentinel.txt").exists()
+    assert not (work / "dry-work" / "manifest-tensor.safetensors").exists()
 
     real_result = json.loads((work / "real-result.json").read_text(encoding="utf-8"))
     real_frame = json.loads((work / "real-frame.json").read_text(encoding="utf-8"))
     assert real_result == {"ok": True, "result": {"marker": "real"}}, real_result
     assert real_frame == {"ok": True, "result": {"marker": "real"}}, real_frame
-    assert (work / "manifest-sentinel.txt").read_text(encoding="utf-8") == "real effect"
-    assert (work / "manifest-tensor.safetensors").is_file()
+    assert (work / "real-work" / "manifest-sentinel.txt").read_text(encoding="utf-8") == "real effect"
+    assert (work / "real-work" / "manifest-tensor.safetensors").is_file()
 
 print("PASS run_lmcode manifest v1, dry/real effects and terminal return frames")
