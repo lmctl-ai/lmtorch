@@ -1,5 +1,4 @@
-# _lmcode_ version of grad-check.lms: build sum(x^2) for x = [1, -2, 3], backpropagate, and check dx = 2x. The DSL version
-# also verifies the analytic gradient against central finite differences, which needs a loop the lmapi version lacks.
+# Build sum(x^2) for x = [1, -2, 3], backpropagate, check dx = 2x, and verify the analytic gradient against central differences.
 # Run: lmscript examples/grad-check-dsl.lms [run_dir]
 import "./lib/torchdsl.lms";
 
@@ -28,7 +27,7 @@ out.check(worst < 0.000001, "finite differences disagree with autograd");
 out.set("dx", dx).set("loss", loss.item()).set("max_fd_error", worst);
 end _lmcode_
 
-res = torchdsl.run_block(grad, path_join(RUN, "grad-check.dslb"));
+res = torchdsl.run_block(grad);
 if (res != null) {
   println("dx:", res.dx, "loss:", res.loss, "finite-difference error below 1e-6:", res.max_fd_error < 0.000001);
 }

@@ -1,5 +1,11 @@
 # Native build (no Python at run time)
 
+## Current build contract (WP175, 2026-11-02)
+
+The product has one lmcode host and no lmcpp checkout. `sdk.lock` pins lmcode-cpp by full SHA and per-file hash;
+`scripts/build-native.sh` verifies the committed vendor tree before configuring CMake. The SDK source clone is needed only
+when intentionally updating the pin with `scripts/sync-sdk.sh`; build and test jobs consume the vendored snapshot.
+
 Goal from the owner (2026-10-19): one lmtorch binary with no runtime dependencies, built from pure C/C++ libraries,
 without docker, Python runtime, GUI or display code. Status of that goal: see status.md.
 
@@ -12,8 +18,8 @@ without docker, Python runtime, GUI or display code. Status of that goal: see st
    KleidiAI, NNPACK/QNNPACK/XNNPACK, Kineto, ITT, NumPy, OpenMP, MKL/BLAS/LAPACK, MAGMA, flash/mem-efficient attention,
    Python bindings, tests. `BLAS=Eigen` with `USE_BLAS=OFF` is required: `BLAS=None` is a configure error
    ("Unrecognized BLAS option"); with USE_BLAS off ATen uses its portable GEMM.
-2. `scripts/build-native.sh` extracts lmcpp at its pinned revision (f6c6f51, via `git archive`, so the checkout's branch
-   does not matter) into the build tree, verifies the SDK pin, and configures CMake with `LMTORCH_LIBTORCH_PREFIX`.
+2. `scripts/build-native.sh` verifies the lmcode-cpp per-file lock in `sdk.lock` and configures CMake with
+   `LMTORCH_LIBTORCH_PREFIX`.
    CMake links `libtorch.a`, `libtorch_cpu.a` and `libc10.a` with `--whole-archive` (operator/dispatcher registrations are
    static initializers), every other archive in the prefix inside `--start-group/--end-group` (protoc, gtest, gmock and
    benchmark excluded), plus `-static-libstdc++ -static-libgcc`. Release form: glibc stays shared (owner decision
@@ -65,10 +71,10 @@ executables: linux-x64 222 MB, linux-arm64 185 MB, macos-x64 224 MB, macos-arm64
   The Windows release imports only KERNEL32.dll and dbghelp.dll (c10 stack traces).
 - A PDB is written next to lmtorch.exe (`/DEBUG /OPT:REF /OPT:ICF`, not shipped); test.sh's smoke run prints the exit
   status and, on Windows, a cdb stack when the binary cannot start.
-- The Python oracles on Windows: safetensors keeps loaded files memory-mapped, so temp directories are created with
+- Historical Python-oracle note (Windows): safetensors keeps loaded files memory-mapped, so temp directories are created with
   `ignore_cleanup_errors=True`; JSON built by string concatenation must escape backslash paths (`json.dumps`).
-- mlp-train keeps the 6-digit check on every OS: all five platforms print loss first 0.886624 / last 0.057287 (DSL) and
-  0.88662... / 0.057286 (lmapi); no tolerance change was needed.
+- Earlier numerical measurements above are historical snapshots from the pre-WP175 examples; the current lmcode example
+  gates assert loss decrease and checkpoint round-trip rather than pinning backend-specific last digits.
 
 ## Measurements (aarch64 dev host, 4 cores, 15 GiB, shared with other teams' builds, 2026-10-20)
 
@@ -77,9 +83,8 @@ executables: linux-x64 222 MB, linux-arm64 185 MB, macos-x64 224 MB, macos-arm64
 - Installed archives: libtorch_cpu.a 398 MB, then onnx, protobuf, protoc (not linked), sleef, fmt, cpuinfo, c10, torch.
 - lmtorch static link: 48 s. Executable 184,599,624 bytes unstripped (122,127,864 stripped), `file`: statically linked,
   `ldd`: not a dynamic executable. `--lmcode-schema` starts in 0.21 s with 94 MB max RSS.
-- Static vs dev (wheel) build: classify-moons-dsl 1.33 s vs 1.90 s, cnn-bars-dsl 0.74 s vs 0.94 s (startup dominates).
-- Numerics: the static build's BLAS-free GEMM differs from the wheel's kernels in the last float32 bits (lmapi mlp-train
-  first loss 0.886623740 static vs 0.886623621 wheel); the PyTorch oracles (tolerance 1e-5; RNG/init exact) pass on both.
+- Historical measurement, static vs dev (wheel) build: classify-moons-dsl 1.33 s vs 1.90 s, cnn-bars-dsl 0.74 s vs 0.94 s (startup dominates).
+- Numerics: the static build's BLAS-free GEMM may differ from wheel kernels in final float32 bits; current lmcode tests compare numerical values within their documented tolerances.
 
 ## Gotchas
 

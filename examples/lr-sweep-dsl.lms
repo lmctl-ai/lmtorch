@@ -1,5 +1,5 @@
 # Multi-step task: choose a learning rate by sweeping, then train the winner longer and verify it on held-out points.
-#   1 sweep     the same DSL program is compiled once per candidate rate (${} makes the rate a literal) and every compiled
+#   1 sweep     the same lmcode program is compiled once per candidate rate (${} makes the rate a literal) and every compiled
 #               program runs in ONE lmtorch process; each reports its final loss under its own key
 #   2 select    lmscript discards diverged runs (non-finite loss comes back as null) and picks the lowest final loss
 #   3 refine    train the winning rate for 5x the steps and save the model
@@ -12,9 +12,8 @@ RUN = ARGV.get(0, "artifacts/lr-sweep-dsl");
 STEPS = 150;
 mkdir(RUN, true);
 RATES = [0.0005, 0.005, 0.02, 0.05, 0.2, 3.0];
-
-files = [];
-prog = null;   # any compiled sweep block: dsl_cli() of each names the same lmtorch
+HOST_SCHEMA = load_schema(cli="lmtorch");
+sweep_builder = lmcode_build(HOST_SCHEMA);
 for (i = 0; i < len(RATES); i = i + 1) {
   LR_MICRO = round(RATES[i] * 1000000);
   KEY = f"lr{i}";
@@ -36,20 +35,19 @@ for (step in range(0, ${STEPS})) {
 }
 out.set(${KEY}, loss);
 end _lmcode_
-  path = path_join(RUN, f"sweep-{i}.dslb");
-  savedsl(sweep, path);
-  push(files, path);
-  prog = sweep;
+  sweep_builder.add(sweep);
 }
-res = torchdsl.run(prog, files);
+res = torchdsl.run(sweep_builder);
 if (res == null) { exit(0); }
+losses = res;
 
 BEST = -1;
+BEST_LOSS = null;
 println("1 sweep (final MSE after " + str(STEPS) + " steps):");
 for (i = 0; i < len(RATES); i = i + 1) {
-  loss = res[f"lr{i}"];
+  loss = losses[i].get(f"lr{i}", null);
   println(sprintf("   lr %-8s %s", str(RATES[i]), loss == null ? "diverged" : sprintf("%.6f", loss)));
-  if (loss != null && (BEST < 0 || loss < res[f"lr{BEST}"])) { BEST = i; }
+  if (loss != null && (BEST < 0 || loss < BEST_LOSS)) { BEST = i; BEST_LOSS = loss; }
 }
 if (BEST < 0) { println("every rate diverged"); exit(1); }
 LR = RATES[BEST];
@@ -86,10 +84,13 @@ let err = (model.forward(x) - (x * 3.0).sin()).abs();
 out.set("heldout_max_error", err.max().item()).set("heldout_mse", err.square().mean().item());
 out.check(err.max().item() < 0.1, "held-out error is too large");
 end _lmcode_
-savedsl(refine, path_join(RUN, "refine.dslb"));
-savedsl(verify, path_join(RUN, "verify.dslb"));
-final = torchdsl.run(refine, [path_join(RUN, "refine.dslb"), path_join(RUN, "verify.dslb")]);
+final_builder = lmcode_build(HOST_SCHEMA);
+final_builder.add(refine);
+final_builder.add(verify);
+final = torchdsl.run(final_builder);
+refined = final[0];
+verified = final[1];
 trail = [];
-for (v in final.loss) { push(trail, sprintf("%.5f", v)); }
+for (v in refined.loss) { push(trail, sprintf("%.5f", v)); }
 println(f"3 refine: {LONG} steps, loss every 150 steps: {join(trail, ' ')}");
-println(sprintf("4 verify: held-out MSE %.6f, max error %.4f", final.heldout_mse, final.heldout_max_error));
+println(sprintf("4 verify: held-out MSE %.6f, max error %.4f", verified.heldout_mse, verified.heldout_max_error));

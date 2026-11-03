@@ -1,4 +1,4 @@
-# Multi-step task: a two-moons classifier, from raw data to a decision map, in four DSL programs orchestrated by lmscript.
+# Multi-step task: a two-moons classifier, from raw data to a decision map, in four lmcode programs orchestrated by lmscript.
 #   1 prepare   generate the noisy two-moons set, shuffle, split 80/20, standardize with training statistics, save a bundle
 #   2 train     2-16-16-2 MLP, Adam, shuffled minibatches; save the model (architecture travels in its metadata)
 #   3 evaluate  reload the model with torch.load_model, score the held-out split, confusion counts
@@ -12,6 +12,7 @@ RUN = ARGV.get(0, "artifacts/classify-moons-dsl");
 SEED = num(ARGV.get(1, "7"));
 TARGET = 0.95;
 mkdir(RUN, true);
+HOST_SCHEMA = load_schema(cli="lmtorch");
 
 prepare = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
 let run = ${RUN};
@@ -40,7 +41,7 @@ torch.bundle()
 out.set("train", ntrain).set("test", 2 * n - ntrain).set("class_balance", y.to(DType.F32).mean().item());
 end _lmcode_
 
-data = torchdsl.run_block(prepare, path_join(RUN, "prepare.dslb"));
+data = torchdsl.run_block(prepare);
 if (data == null) { exit(0); }
 println(f"1 prepare: {data.train} training and {data.test} held-out points, class balance {data.class_balance}");
 
@@ -97,14 +98,19 @@ end _lmcode_
   out.set("false_pos", ((1.0 - truth1) * pred1).sum().item()).set("true_neg", ((1.0 - truth1) * (1.0 - pred1)).sum().item());
 end _lmcode_
 
-  savedsl(train, path_join(RUN, "train.dslb"));
-  savedsl(evaluate, path_join(RUN, "evaluate.dslb"));
-  # Steps 2 and 3 run as two files in one lmtorch process: loaded and verified together, executed in order.
-  res = torchdsl.run(train, [path_join(RUN, "train.dslb"), path_join(RUN, "evaluate.dslb")]);
-  println(sprintf("2 train (attempt %d, %d epochs): final epoch loss %.4f, train accuracy %.3f", attempt, EPOCHS, res.epoch_loss[len(res.epoch_loss) - 1], res.train_accuracy));
-  println(sprintf("3 evaluate: test accuracy %.3f (tp %d, fn %d, fp %d, tn %d)", res.test_accuracy, res.true_pos, res.false_neg, res.false_pos, res.true_neg));
-  best = res;
-  if (res.test_accuracy >= TARGET) { break; }
+  invocation = lmcode_build(HOST_SCHEMA);
+  invocation.add(train);
+  invocation.add(evaluate);
+  res = torchdsl.run(invocation);
+  if (res == null) { exit(0); }
+  train_result = res[0];
+  evaluation = res[1];
+  println(sprintf("2 train (attempt %d, %d epochs): final epoch loss %.4f, train accuracy %.3f", attempt, EPOCHS, train_result.epoch_loss[len(train_result.epoch_loss) - 1], train_result.train_accuracy));
+  println(sprintf("3 evaluate: test accuracy %.3f (tp %d, fn %d, fp %d, tn %d)", evaluation.test_accuracy, evaluation.true_pos, evaluation.false_neg, evaluation.false_pos, evaluation.true_neg));
+  best = {architecture: train_result.architecture, parameters: train_result.parameters,
+          test_accuracy: evaluation.test_accuracy, true_pos: evaluation.true_pos,
+          false_neg: evaluation.false_neg, false_pos: evaluation.false_pos, true_neg: evaluation.true_neg};
+  if (evaluation.test_accuracy >= TARGET) { break; }
   println(f"  below the {TARGET} target: retraining with {EPOCHS * 2} epochs");
   EPOCHS = EPOCHS * 2;
 }
@@ -131,7 +137,7 @@ let data = torch.open(run + "/data.safetensors");
 let points = (torch.tensor(${GRID_JSON}, DType.F32) - data.get("mean")).div(data.get("std"));
 out.set("classes", model.forward(points).argmax(1));
 end _lmcode_
-grid = torchdsl.run_block(predict, path_join(RUN, "predict.dslb"));
+grid = torchdsl.run_block(predict);
 println("4 predict: decision regions (o = upper moon, x = lower moon)");
 map = "";
 for (r = 0; r < ROWS; r = r + 1) {

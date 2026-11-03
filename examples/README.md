@@ -1,58 +1,34 @@
 # lmtorch examples
 
-Two ways to drive the same `lmtorch` binary from lmscript:
+All examples compile lmcode programs and invoke the native host through `run_lmcode`. The invocation manifest and
+terminal return frame are handled by lmscript, while tensor values, gradients, models and optimizers stay in the CPU
+libtorch host.
 
-- **lmapi operations** (`*.lms` without `-dsl`): `import "github:lmctl-ai/lmtorch@latest lmtorch";` (lmscript >= 0.2.420)
-  makes each of the twelve operations a function; every call is one lmtorch process and tensors travel through
-  safetensors files. The schema comes from the binary (`lmtorch --cli-schema --json`), the binary is lmtorch on PATH or
-  else that release (installed exactly like `install=` below), and every call runs that exact binary.
-- **`_lmcode_` programs** (`*-dsl.lms`): a `_lmcode_` block is compiled by lmscript into bytecode (`savedsl`), and
-  `lmtorch --lmcode FILE.dslb` runs it against libtorch in one process: loops, autograd, models and optimizers stay in
-  memory. `lib/torchdsl.lms` holds the shared compile-and-run plumbing; the API is [docs/dsl-api.md](../docs/dsl-api.md).
-
-Every block is `_lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest"` (lmscript >= 0.2.420): no schema file and
-no manual install.
-
-- `cli="lmtorch"`: lmscript asks the binary for its schema (`lmtorch --lmcode-schema --json`) and compiles against exactly
-  those bytes, so the bytecode is bound to the binary that runs it.
-- `install=`: when `lmtorch` is not on PATH, lmscript downloads the release asset `lmtorch-OS-ARCH[.exe]` into its
-  tool cache (`~/.cache/lmscript/tools`, or `LMSCRIPT_TOOL_CACHE`), verified against GitHub's SHA-256 digest. `@latest`
-  (lmscript R45) is the newest release: each real run asks GitHub for it and replaces the cached binary when its
-  `lmtorch --version` differs, so a new release needs no edit here. `--check` never uses the network, so on a fresh
-  machine run the script once first. Pin a tag (`@v0.4.1`) for reproducible or offline use.
-- `dsl_cli(p)`: the argv prefix of that exact binary; the helpers run `system ${dsl_cli(p)} --lmcode FILE...`.
-
-[install-and-run-dsl.lms](install-and-run-dsl.lms) is the minimal version of this. Run from the repository root; outputs
-go to `artifacts/<example>/` below the working directory, which lmtorch requires. To use a local build instead of the
-release, put it first on PATH:
+Every program declares `cli="lmtorch"` and `install="github:lmctl-ai/lmtorch@latest"`. A local binary on `PATH` wins;
+otherwise lmscript installs the selected release into its private tool cache and verifies its digest. Run from the
+repository root so generated artifacts stay in a scratch workspace:
 
 ```sh
-export PATH="$PWD/build/bin:$PATH"   # optional: a local build wins over install=
-lmscript examples/classify-moons-dsl.lms
+export PATH="$PWD/build/bin:$PATH"   # optional local native build
+lmscript examples/classify-moons.lms
 ```
 
-## The original recipes and their `_lmcode_` versions
+## Recipes
 
-| lmapi recipe | `_lmcode_` version | What changes |
+| Entry point | lmcode program | Coverage |
 |---|---|---|
-| [tensor-chain.lms](tensor-chain.lms) | [tensor-chain-dsl.lms](tensor-chain-dsl.lms) | four processes and four artifacts become one program; operators (`b + a`) |
-| [grad-check.lms](grad-check.lms) | [grad-check-dsl.lms](grad-check-dsl.lms) | adds a finite-difference check in a DSL loop |
-| [mlp-train.lms](mlp-train.lms) | [mlp-train-dsl.lms](mlp-train-dsl.lms) | 28 processes become one (11.9 s → 1.1 s on the dev host, including the lmapi cross-check); identical losses (0.886624 → 0.057287); the lmapi `mlp_forward` scores the DSL checkpoint |
-| train-report.lms (removed: it needed the private lmcreator) | [train-report-dsl.lms](train-report-dsl.lms) | 72 calls plus a separate chart and DOCX tool became one program plus a Markdown report; identical metrics (R² 0.989220) |
+| [tensor-chain.lms](tensor-chain.lms) | [tensor-chain-dsl.lms](tensor-chain-dsl.lms) | Tensor creation, matmul, add, softmax, save and inspect |
+| [grad-check.lms](grad-check.lms) | [grad-check-dsl.lms](grad-check-dsl.lms) | Autograd gradient and central-difference check |
+| [mlp-train.lms](mlp-train.lms) | [mlp-train-dsl.lms](mlp-train-dsl.lms) | 20-step SGD training, portable model checkpoint and reload check |
+| [train-report-dsl.lms](train-report-dsl.lms) | same | Loss table and report generation |
+| [classify-moons-dsl.lms](classify-moons-dsl.lms) | same | Dataset preparation, MLP training, prediction and decision map |
+| [lr-sweep-dsl.lms](lr-sweep-dsl.lms) | same | Multi-program invocation, sweep selection and refinement |
+| [checkpoint-resume-dsl.lms](checkpoint-resume-dsl.lms) | same | Uninterrupted versus save/reload training equivalence |
+| [cnn-bars-dsl.lms](cnn-bars-dsl.lms) | same | CPU convolutional image classifier |
+| [regression-csv-dsl.lms](regression-csv-dsl.lms) | same | CSV input, fitting and prediction output |
+| [install-and-run-dsl.lms](install-and-run-dsl.lms) | same | Private release install and native invocation |
 
-## Multi-step tasks
+The original short recipe filenames remain runnable entry points and use the same lmcode host as the longer example names.
 
-| Example | Steps |
-|---|---|
-| [classify-moons-dsl.lms](classify-moons-dsl.lms) | prepare (generate, shuffle, split, standardize, save) → train (MLP, Adam, minibatches) → evaluate (`torch.load_model`, confusion) → lmscript retries with more epochs below target → predict a grid chosen by lmscript → text decision map and report |
-| [lr-sweep-dsl.lms](lr-sweep-dsl.lms) | one program compiled per learning rate, all run in one process → lmscript discards diverged runs and picks the best → refine 5x longer → verify on held-out points (`out.check`) |
-| [checkpoint-resume-dsl.lms](checkpoint-resume-dsl.lms) | uninterrupted 40 steps vs 20 + save + reload + 20 in separate processes → bit-identical checkpoints |
-| [cnn-bars-dsl.lms](cnn-bars-dsl.lms) | synthesize labelled images in the DSL → conv2d/max_pool2d network → held-out accuracy → classify pictures lmscript draws as ASCII art |
-| [regression-csv-dsl.lms](regression-csv-dsl.lms) | lmscript writes a CSV → DSL reads, standardizes, fits weights with Adam on hand-made parameters, writes predictions CSV → lmscript parses it and checks the recovered formula |
-
-Every example needs only lmtorch and lmscript. `../test.sh` runs every example and checks its output.
-
-The compact examples used in the generated book are:
-
-- `tensor-sum-dsl.lms` Creates a two-by-two tensor and checks its scalar sum.
-- `autograd-gradient-dsl.lms` Backpropagates through a sum of squares and checks the gradient.
+Every example needs lmtorch and lmscript only. `../test.sh` runs the examples, host checks, invocation-manifest controls,
+CPU-only C++ unit tests, and (when a CPU PyTorch wheel is available) numerical comparisons against Python PyTorch.

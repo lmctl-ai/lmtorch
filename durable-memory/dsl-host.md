@@ -1,12 +1,21 @@
-# The `_lmcode_` host (lmtorch --lmcode)
+# lmcode host (lmtorch --lmcode)
+
+## Current boundary (WP175, 2026-11-02)
+
+`lmtorch` exposes one native host surface: `--lmcode`, `--lmcode-schema`, and `--lmcode-signatures`. The C++ host vendors
+lmcode-cpp at the full reviewed SHA in `sdk.lock`, consumes invocation manifest v1 with `InvocationResults`, propagates
+the manifest dry flag to its VM context, and emits the terminal `LMCODE_RETURN` frame. Its public filesystem work
+remains contained to the invocation directory. CMake, public headers, build scripts and CI no longer depend on the former
+command SDK. See `docs/parity.md` and `durable-memory/testing.md` for the active contract.
+
+## Historical implementation notes (pre-WP175)
 
 What it is: lmtorch embeds the lmcode-cpp VM (`third_party/dslvm/dslvm.hpp` plus `stdlib/*.hpp`,
 the std schema and `scripts/merge-std.py`, all pinned per file by `sdk.lock`) and binds the host-only
 `schema/lmtorch.dsl.json` to libtorch in `src/dsl_host.cpp`. lmscript compiles `_lmcode_` blocks
-against that schema (`savedsl`); `lmtorch --lmcode A.dslb [B.dslb ...]` runs them. API reference: `docs/dsl-api.md`.
-Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--lmcode-signatures` parity, one JSON line).
+against that schema; `run_lmcode` compiles and invokes the host with manifest v1. The host validates every submitted bytecode file before running effects, collects each result slot, and emits one terminal `LMCODE_RETURN` frame. API reference: `docs/dsl-api.md`.
 
-## Decisions (2026-10-20)
+## Retained implementation decisions (originally recorded 2026-10-20; revised by WP175)
 
 - **lmcode std (2026-10-24):** the default `dslvm::Registry` installs the 72-signature lmcode std (strings, math,
   collections, files). lmtorch registers none of it and dropped its own `StrList` (`Bundle.keys()` returns the std one via
@@ -15,13 +24,8 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--lm
   declarations. lmscript 0.2.420 or later and the default runtime registry provide std automatically. `_lmcode_` is the
   current spelling; `_dsl_` remains accepted as an alias.
 
-- **Host flag standard (lmscript R42, 2026-10-20):** `--lmcode-schema [--json]` (DSL schema), `--cli-schema [--json]` (lmapi
-  document; `--schema` stays as the lmapi protocol name), `--lmcode-signatures`. lmscript's `_lmcode_ cli="lmtorch"` runs
-  `lmtorch --lmcode-schema --json` at compile time, so scripts need no schema file; examples keep `schema=` until an lmscript
-  release ships R42 (test.sh runs a cli= smoke test whenever the compiler supports it).
-- **One binary, two front ends.** `main.cpp` sends `--lmcode`, `--lmcode-schema`, `--lmcode-signatures` to the DSL host; everything
-  else is the unchanged lmcpp/lmapi CLI (`--schema` stays byte-identical to `cli.schema.dev.json`, the acceptance gate
-  from status.md). The DSL schema flag is `--lmcode-schema` because `--schema` already belongs to lmapi.
+- **Current compiler integration (WP175):** `_lmcode_ cli="lmtorch"` discovers the embedded schema, and `run_lmcode` compiles and invokes a program with its manifest. Portable examples may still set `schema=` explicitly when running from a scratch directory.
+- **One host surface (WP175):** `main.cpp` accepts `--version`, `--lmcode`, `--lmcode-schema`, and `--lmcode-signatures`. The former lmcpp/lmapi CLI and operations were removed; invalid legacy flags return a framed CLI error.
 - **Context:** `torch` (Torch) for everything tensor-shaped and `out` (Out) for the result object. No free functions:
   reads like PyTorch (`torch.zeros`, `torch.manual_seed`).
 - **Schema 2 operators** map `+ - * neg r+ r- r*` to Tensor methods; `/` has no schema-2 operator key, so `div()`.
@@ -35,28 +39,22 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--lm
   Measured (dev build, 2026-10-20): 20000 Adam steps of an 8-32-1 MLP on 64 rows keep 40002 live tensors and 255 MB max
   RSS without release, 2 live tensors and 126 MB with `mark()`/`release()` per step; the same 5 s either way.
 - **Every registry entry re-checks argument kinds** (the VM does not) and converts c10::Error (first line, max 300 chars),
-  lmcpp::Error, bad_alloc, std::exception and unknown exceptions into located `RUN_HOST` errors.
-  Bug found by tests/dsl/negative.lms: lmcpp::Error is not a std::exception, and an uncaught one aborted the process
-  (read_csv outside cwd). The wrapper catches it now.
-- **Files stay inside the working directory** (`lmtorch::check_contained`, the lmapi rule) and DSL saves replace
-  atomically (rename), unlike the lmapi operations' exclusive link() writes. Re-runnable scripts need replacement.
+  lmtorch::Error, bad_alloc, std::exception and unknown exceptions into located `RUN_HOST` errors.
+  The safetensors error type is owned by lmtorch and translated at the host boundary.
+- **Files stay inside the working directory** (`lmtorch::check_contained`) and lmcode saves replace atomically (rename), allowing re-runnable scripts.
   Windows (`#ifdef _WIN32`, `lmtorch::win_atomic_write`): CREATE_NEW temp file next to the target, FlushFileBuffers,
-  MoveFileExW with REPLACE_EXISTING|WRITE_THROUGH (DSL) or without REPLACE_EXISTING (lmapi: ERROR_ALREADY_EXISTS is the
-  CONFLICT); no mode bits or directory fsync. Containment compares components case-insensitively and refuses ADS, device
+  MoveFileExW with REPLACE_EXISTING|WRITE_THROUGH; no mode bits or directory fsync. Containment compares components case-insensitively and refuses ADS, device
   names and trailing dots/spaces. Paths are in the ANSI code page there (argv and std::filesystem::path(std::string)).
 - **Models are `torch::nn::Sequential`.** State dict names equal PyTorch's (`0.weight`). `Model.save` stores
   `torchcli_format=model-1` and `layers=<summary>`; `torch.load_model` replays that spec through the same `add_layer`
   used by the builder methods, so the summary text is a format: change it only together with `replay_layers`.
-- **RNG is the default CPU generator**: `torch.manual_seed(s); torch.rand(...)` equals Python, and equals the lmapi
-  `tensor_rand` (which seeds a fresh generator per call), so ported recipes reproduce their old numbers exactly.
-- **Result protocol:** exactly one stdout line for the whole invocation (lmcad prints one per file; lmtorch does not), the
-  `out` object accumulated across files. All files are loaded and verified before any runs (lmhtml rule).
+- **RNG is the default CPU generator**: `torch.manual_seed(s); torch.rand(...)` equals Python, and preserves the prior CPU recipe values.
+- **Result protocol:** one terminal return frame for the invocation, with a result per builder slot and each program's `out` object. All files are loaded and verified before any runs.
 - **Per-file state:** grad mode is reset to enabled before each file of a multi-file run; the RNG, thread count and `out`
   object carry over (a later file continues the random stream).
 - **Literals are strict:** all scalars of `torch.tensor(json)` must share the final depth and fill the inferred shape;
   overflowing numbers are refused by the JSON parser; nonfinite values are refused.
-- **Threads:** the DSL path keeps libtorch's default intra-op thread count (`torch.set_num_threads` to change it); the lmapi
-  path keeps its fixed 2 threads.
+- **Threads:** the lmcode path keeps libtorch's default intra-op thread count (`torch.set_num_threads` to change it).
 
 ## Gotchas
 
@@ -71,4 +69,4 @@ Pattern copied from ../poc/lmcad and ../poc/lmhtml (embedded schema bytes, `--lm
 
 ## Hard host flag cutover
 
-The selector in main and the lmcode parser expose only the lmcode flag family; retired host spellings are rejected. SDK20325f7 is synchronized through scripts/sync-sdk.sh and adds the current206-signature catalog, superseding the historical72-signature note above. Internal DSLB and .dslb names remain. test.sh checks exact discovery and refusal before file effects, then realv6 execution. Local qualification uses the documented development build with CPU PyTorch2.9.1 and both numerical oracle suites. This does not qualify static release linkage.
+WP175 removed the lmcpp/lmapi implementation and retained only the lmcode host protocol. The vendored SDK revision and file hashes are recorded in `sdk.lock`; `scripts/sync-sdk.sh --verify` checks them. `test.sh` validates manifest v1, dry and real effects, result frames, schema discovery, examples, and CPU numerical oracles when available. Local native qualification is unavailable without Torch and nlohmann headers; the CI matrix remains the native build gate.

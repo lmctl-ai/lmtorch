@@ -4,7 +4,7 @@
 #   - install="github:lmctl-ai/lmtorch@latest" says where lmtorch comes from when it is not on PATH: lmscript downloads the
 #     release asset lmtorch-OS-ARCH[.exe] once into its tool cache, verified against the SHA-256 digest GitHub reports, and
 #     uses it from then on;
-#   - dsl_cli(p) is the argv prefix of that exact binary, so `system ${dsl_cli(p)} --lmcode FILE` runs it.
+#   - `run_lmcode` runs the compiled program through the version-1 manifest and consumes the terminal return frame.
 # The program itself: a matrix product, an autograd gradient and a two-parameter least-squares fit, with known answers.
 # Run: lmscript examples/install-and-run-dsl.lms   (works on a machine with only Node.js and lmscript installed)
 
@@ -30,17 +30,14 @@ while (i < 500) {
 out.set("fit_mse", (model.forward(xs) - ys).square().mean().item());
 end _lmcode_
 
-file = "install-and-run.dslb";
-savedsl(p, file);
-r = system ${dsl_cli(p)} --lmcode ${file};
-delete_file(file);
-if (r.code != 0) {
-  println(f"lmtorch exit {r.code}: {trim(r.stdout)} {trim(r.stderr)}");
+r = run_lmcode(p);
+if (!r.ok) {
+  println(f"lmtorch {r.phase} error {r.code}: {r.message}");
   exit(1);
 }
-res = json_parse(r.stdout).result;
+res = r.result;
 ok = res.matmul_sum == 54.0 && json_stringify(res.grad) == "[2,4,6]" && res.fit_mse < 0.000001;
-println(f"lmtorch at {dsl_cli(p)[0]}");
+println("lmtorch invocation completed through run_lmcode");
 mse = sprintf("%.9f", res.fit_mse);
 println(f"matmul sum {res.matmul_sum}, grad {json_stringify(res.grad)}, fit mse {mse}");
 if (!ok) {

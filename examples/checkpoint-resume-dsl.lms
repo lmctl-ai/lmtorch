@@ -72,19 +72,11 @@ out.set("identical", same);
 out.check(same, "resumed training diverged from uninterrupted training");
 end _lmcode_
 
-paths = [];
-names = ["straight", "first-half", "second-half", "compare"];
-blocks = [straight, first_half, second_half, compare];
-for (i = 0; i < len(blocks); i = i + 1) {
-  p = path_join(RUN, names[i] + ".dslb");
-  savedsl(blocks[i], p);
-  push(paths, p);
-}
-# Run A, then B1 and B2 as separate processes (as an interrupted job would), then the comparison.
-a = torchdsl.run(straight, [paths[0]]);
-b1 = torchdsl.run(first_half, [paths[1]]);
-b2 = torchdsl.run(second_half, [paths[2]]);
-cmp = torchdsl.run(compare, [paths[3]]);
+# Run A, then B1 and B2 as separate invocations (as an interrupted job would), then compare checkpoints.
+a = torchdsl.run(straight);
+b1 = torchdsl.run(first_half);
+b2 = torchdsl.run(second_half);
+cmp = torchdsl.run(compare);
 if (a == null) { exit(0); }
 println(sprintf("A  uninterrupted: loss %.6f -> %.6f over 40 steps", a.a_loss[0], a.a_loss[39]));
 println(sprintf("B  resumed:       loss %.6f -> %.6f (20 steps, save, reload, 20 steps)", b1.b_loss[0], b2.b_loss[19]));

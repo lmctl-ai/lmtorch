@@ -1,5 +1,15 @@
 # lmtorch status and hand-off (2026-10-21)
 
+## Current status (WP175, 2026-11-02)
+
+lmtorch has one native host surface: lmcode. The previous command/API surface and C++ SDK dependency have been removed.
+The executable consumes invocation manifest v1 through `InvocationResults`, propagates manifest dry mode to the VM, and
+emits the terminal `LMCODE_RETURN` frame. `sdk.lock` pins lmcode-cpp `7cf09164797324e07b0f2ebed8def995b007f095` by full
+SHA with per-file hashes. CMake and public headers contain no legacy SDK dependency; safetensors uses lmtorch-owned error
+types and nlohmann-json. CPU-only native CI is the verification gate.
+
+The remainder is a dated historical snapshot from before WP175. Its references to two front ends, lmcpp pins, and retired host flags do not describe the current build.
+
 Public at https://github.com/lmctl-ai/lmtorch since 2026-10-20: lmctlhq/torchcli (repo id 1417876046) was transferred and
 renamed with its full history after an owner-approved audit (no credentials or home paths; history keeps mentions of
 private repo/folder names such as lmctlhq/lmcreator, cppwrapper and m4g). Formerly `torchcli`. Renamed to lmtorch (binary, schemas, docs, env vars `LMTORCH_*`,
@@ -7,6 +17,8 @@ cache `~/.cache/lmtorch`) on 2026-10-20 for the move to the public lmctl-ai/lmto
 `torchcli_format` is a file-format key and keeps its name so existing checkpoints stay readable.
 
 ## State
+## Historical snapshot (pre-WP175)
+
 - One C++17 binary, two front ends. lmapi: the original 12 operations (lmcpp, `--schema` byte-identical to
   `cli.schema.dev.json`, tool name `lmtorch`). DSL: `lmtorch --lmcode prog.dslb` runs lmscript `_lmcode_` bytecode (v5,
   lmcode-cpp VM pinned in `sdk.lock`) against host-only `schema/lmtorch.dsl.json`: 216 lmtorch signatures; the registry and compiler

@@ -1,16 +1,14 @@
-# lmtorch `_lmcode_` API
+# lmtorch lmcode API
 
-`schema/lmtorch.dsl.json` is the host contract (dsl.schema 2, bytecode v6), identical to lmtorch's declarations in
-`schema/lmtorch.host.json`. The lmcode-cpp VM's default registry and lmscript 0.2.420 or later supply the built-in std
+`schema/lmtorch.dsl.json` is the host contract (schema 2, bytecode v6), identical to lmtorch's declarations in
+`schema/lmtorch.host.json`. The pinned lmcode-cpp SDK and lmscript 0.2.450 or later supply the built-in std
 schema automatically (see [lmcode std](#lmcode-std)); it does not need duplicate host declarations. `_lmcode_` is the
-current block spelling; `_dsl_` remains a compatible alias and both compile to the same bytecode. `lmtorch --lmcode-schema`
-prints this list grouped by type; `lmtorch --lmcode-schema --json` prints the exact host schema bytes, so a block can name the binary
-instead of a schema file: `prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.420)
-compiles against the binary's own schema, which can never drift from the binary that runs it. `install=` downloads the
-newest release (`@latest`; pin `@vX.Y.Z` for reproducibility, verified against GitHub's SHA-256 digest) when lmtorch is not on PATH, and `dsl_cli(prog)` is the argv prefix of
-the binary the block was compiled against. `lmtorch --cli-schema` prints the
-lmapi document (the same as lmapi's `--schema`); `lmtorch --lmcode-signatures` prints
-the canonical signatures, which `test.sh` diffs against `lmscript --lmcode-signatures schema/lmtorch.dsl.json`.
+lmcode block spelling. `lmtorch --lmcode-schema` prints this list grouped by type; `lmtorch --lmcode-schema --json` prints
+the exact host schema bytes. A block can select the executable and bind compilation to its schema:
+`prog = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";` (lmscript >= 0.2.450). `install=` downloads
+the newest release (`@latest`; pin `@vX.Y.Z` for reproducibility and digest verification) when lmtorch is not on PATH.
+`lmtorch --lmcode-signatures` prints canonical signatures, which `test.sh` diffs against
+`lmscript --lmcode-signatures schema/lmtorch.dsl.json`.
 
 A program is an lmscript `_lmcode_` block compiled to bytecode and run by the native host:
 
@@ -21,13 +19,12 @@ let loss = (x.matmul(x) + 1.0).square().mean();
 loss.backward();
 out.set("loss", loss.item()).set("grad", x.grad());
 end _lmcode_
-savedsl(prog, "prog.dslb");
-r = system ${dsl_cli(prog)} --lmcode prog.dslb;   # stdout: {"ok": true, "result": {"loss": ..., "grad": [[...], [...]]}}
+r = run_lmcode(prog);   # uses the v1 invocation manifest and decodes the terminal return frame.
 ```
 
-The language is the lmscript DSL (typed `let`, `if`/`else`, `switch`, `while`, `for (i in range(a, b))`, `for (x in list)`,
+The language is lmscript (typed `let`, `if`/`else`, `switch`, `while`, `for (i in range(a, b))`, `for (x in list)`,
 compiler-inlined `fn`, `int`/`float`/`string`/`bool`, `str()`, `float()`, `int()`, `abs`/`min`/`max`/`sqrt`/... on
-primitives). No lists or maps exist in the DSL itself: tensors and the host collections below carry data.
+primitives). lmcode programs use tensors and the host collections below for structured data.
 `${expr}` in the block substitutes an lmscript value as a literal before compiling (strings, ints, finite floats,
 bools); pass lists as JSON text (`torch.tensor(${json_stringify(rows)})`) and a float that may be integral as scaled
 int (`float(${round(lr * 1000000)}) / 1000000.0`).
@@ -55,7 +52,7 @@ int (`float(${round(lr * 1000000)}) / 1000000.0`).
 | `cat(list, dim)`, `stack(list, dim)` | Tensor | non-empty list |
 | `manual_seed(int)` | void | seeds the default CPU generator: the same draws as Python `torch.manual_seed` |
 | `set_num_threads(1..256)`, `grad_enabled(bool)`, `is_grad_enabled()` | | intra-op threads; autograd recording on/off (`torch.no_grad()`) |
-| `load(path[, key])`, `save(path, Tensor)` | Tensor / void | safetensors; the single-tensor key is `tensor` (the lmapi format: `path#tensor`) |
+| `load(path[, key])`, `save(path, Tensor)` | Tensor / void | safetensors; the single-tensor key is `tensor`, referenced as `path#tensor` |
 | `bundle()`, `open(path)` | Bundle | named tensors plus string metadata in one safetensors file |
 | `read_csv(path, bool header)` | Tensor | F32 `[rows, cols]`; every cell a finite number; blank lines skipped |
 | `sequential()` | Model | an empty `nn.Sequential` |
@@ -63,7 +60,7 @@ int (`float(${round(lr * 1000000)}) / 1000000.0`).
 | `sgd(Model, lr[, momentum])`, `sgd(TensorList, lr)` | Optimizer | `torch.optim.SGD` |
 | `adam(Model, lr)`, `adam(TensorList, lr)`, `adamw(Model, lr, weight_decay)` | Optimizer | `torch.optim.Adam` / `AdamW` defaults otherwise |
 | `mark()`, `release(mark)`, `live_tensors()` | int | handle lifetime, see below |
-| `version()` | string | `lmtorch 0.4.0 (libtorch 2.9.1, CPU)` |
+| `version()` | string | `lmtorch 0.5.1 (libtorch 2.9.1, CPU)` |
 
 ## Tensor
 
@@ -116,23 +113,22 @@ lists, at most 1e6 elements; nonfinite floats become `null`). `out.log(text)` wr
 `out.check(cond, message)` and `out.fail(message)` stop the run with an application failure. `out.write_text(path, text)`
 writes a file.
 
-stdout carries exactly one line:
+The host writes one terminal frame containing a compact JSON envelope:
 
-    {"ok": true, "result": {...}}                                           exit 0
-    {"ok": false, "phase": "load", "code": "LOAD_...", "message": ...}      exit 3  (nothing ran)
-    {"ok": false, "phase": "run", "code": "RUN_HOST|RUN_ERROR", "message": "dsl line N:C: ...", "line": N, "column": C}   exit 3
-    {"ok": false, "phase": "app", "code": "APP_FAIL", "message": ..., "line": N, ...}                                       exit 4
+    LMCODE_RETURN_BEGIN
+    {"ok":true,"result":{...}}
+    LMCODE_RETURN_END
 
-Usage errors exit 2 with no result line; lmscript compile errors also exit 2. `--lmcode A.dslb B.dslb ...` loads and verifies
-every file before running any, then runs them in order with one host state (the `out` object, the RNG, thread settings;
-autograd recording is reset to enabled at the start of each file);
-each file has its own DSL locals, so files hand tensors to each other through safetensors files.
+Failures use the same frame, with `phase`, `code`, `message`, optional source location/part, and exit codes 2 (CLI), 3
+(load/run), or 4 (application). A manifest dry invocation adds `"dry":true`. `run_lmcode` supplies manifest v1 and
+decodes this frame. All bytecode inputs are loaded before any host operation; each part has a separate result slot while
+Torch state is shared for the invocation. Autograd recording resets to enabled at each part.
 
 ## Files
 
 Every path is relative to, and must stay inside, the working directory (symlinks are resolved; `..` escapes and
 absolute paths elsewhere are refused; on Windows the comparison ignores case, and alternate data streams, device names
-such as `CON` and names ending in a dot or space are refused). DSL saves replace an existing file atomically (temporary
+such as `CON` and names ending in a dot or space are refused). lmcode saves replace an existing file atomically (temporary
 file, then rename; `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH` on Windows).
 Formats: safetensors (F32, F64, I64, BOOL; header ≤ 1 MiB, file ≤ 256 MiB), CSV, text.
 

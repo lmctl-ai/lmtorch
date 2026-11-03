@@ -18,10 +18,10 @@ Run CPU tensors, automatic differentiation, and small neural networks from LMScr
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/readme/architecture-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/readme/architecture-light.png">
-  <img alt="LMScript flows through the DSL schema and native lmtorch host to tensor results." src="docs/readme/architecture-light.png" width="100%">
+  <img alt="LMScript compiles lmcode and the native lmtorch host returns CPU tensor results." src="docs/readme/architecture-light.png" width="100%">
 </picture>
 
-The same executable supports safetensors operations and compiled `_lmcode_` programs. Models, gradients, and tensor data stay in the native host; no Python runtime is needed.
+The native executable exposes one lmcode host protocol. Programs operate on CPU tensors and safetensors artifacts; models, gradients and tensor data stay in libtorch, with no Python runtime in the executable.
 
 ## Examples
 
@@ -77,7 +77,7 @@ lmctl autorun https://lmctl.com/tools/lmtorch/lmtorch_solo.lms
 
 - [lmtorch tool book](https://lmctl.com/tools/lmtorch/)
 - [Get started](https://lmctl.com/tools/lmtorch/get_started.html)
-- [DSL API](docs/dsl-api.md) | [Example guide](examples/README.md)
+- [lmcode API](docs/dsl-api.md) | [Example guide](examples/README.md)
 - [Releases and downloads](https://github.com/lmctl-ai/lmtorch/releases)
 
 ## Build and test

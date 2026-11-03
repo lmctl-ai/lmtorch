@@ -1,6 +1,6 @@
 # Multi-step task: fit a linear price model from a CSV file and hand the predictions back as CSV.
 #   1 lmscript  writes houses.csv (size, rooms, age -> price) from a known formula plus deterministic noise
-#   2 fit       the DSL reads the CSV, standardizes the features, fits weights and bias with Adam on hand-made
+#   2 fit       lmcode reads the CSV, standardizes the features, fits weights and bias with Adam on hand-made
 #               parameters (torch.list + requires_grad), converts them back to original units, writes predictions.csv
 #   3 lmscript  reads predictions.csv with csv_parse, summarizes residuals and compares the coefficients to the truth
 # Run: lmscript examples/regression-csv-dsl.lms [run_dir]
@@ -54,7 +54,7 @@ let w_units = w.t().div(std);
 out.set("weights", w_units.flatten()).set("bias", (b - (w_units * mean).sum()).item()).set("train_mse", loss);
 end _lmcode_
 
-res = torchdsl.run_block(fit, path_join(RUN, "fit.dslb"));
+res = torchdsl.run_block(fit);
 if (res == null) { exit(0); }
 println(sprintf("2 fit: price = %.3f*size + %.3f*rooms + %.3f*age + %.3f  (train MSE %.3f)", res.weights[0], res.weights[1], res.weights[2], res.bias, res.train_mse));
 

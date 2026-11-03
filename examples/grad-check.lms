@@ -1,17 +1,33 @@
-import "github:lmctl-ai/lmtorch@latest lmtorch";
+# Build sum(x^2) for x = [1, -2, 3], backpropagate, check dx = 2x, and verify the analytic gradient against central differences.
+# Run: lmscript examples/grad-check.lms [run_dir]
+import "./lib/torchdsl.lms";
 
-RUN = len(ARGV) > 0 ? ARGV[0] : "artifacts/grad-check";
+RUN = ARGV.get(0, "artifacts/grad-check");
 mkdir(RUN, true);
-x = lmtorch.tensor_create({shape: [3], values: [1, -2, 3], out: path_join(RUN, "x.safetensors")});
-if (x.status == "error") { println(x.error.message); exit(1); }
-if (x.status == "simulated") { println("grad-check dry-run: dx [2, -4, 6]"); exit(0); }
-g = lmtorch.autograd_grad({input: x.result.ref, "function": "sum_square", out: path_join(RUN, "dx.safetensors")});
-if (g.status == "error") { println(g.error.message); exit(1); }
-if (g.status == "ok") {
-  d = lmtorch.tensor_inspect({input: g.result.dx.ref, limit: 32});
-  if (d.status == "error") { println(d.error.message); exit(1); }
-  if (d.status == "ok") {
-    if (len(d.result.values) != 3 || d.result.values[0] != 2 || d.result.values[1] != -4 || d.result.values[2] != 6 || g.result.loss != 14) { println("gradient check failed"); exit(1); }
-    println("dx:", d.result.values, "loss:", g.result.loss);
-  }
+
+grad = _lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@latest";
+let run = ${RUN};
+let x = torch.tensor("[1.0, -2.0, 3.0]", DType.F64).requires_grad(true);
+let loss = x.square().sum();
+loss.backward();
+let dx = x.grad();
+dx.save(run + "/dx.safetensors");
+out.check(dx.allclose(x.detach() * 2.0, 0.0, 0.0), "autograd gradient must equal 2x");
+
+# Central differences: (f(x + h e_i) - f(x - h e_i)) / 2h, one coordinate at a time.
+let h = 0.000001;
+let worst = 0.0;
+for (i in range(0, x.numel())) {
+  let up = x.detach().clone().set(i, x.value(i) + h);
+  let down = x.detach().clone().set(i, x.value(i) - h);
+  let numeric = (up.square().sum().item() - down.square().sum().item()) / (2.0 * h);
+  worst = max(worst, abs(numeric - dx.value(i)));
+}
+out.check(worst < 0.000001, "finite differences disagree with autograd");
+out.set("dx", dx).set("loss", loss.item()).set("max_fd_error", worst);
+end _lmcode_
+
+res = torchdsl.run_block(grad);
+if (res != null) {
+  println("dx:", res.dx, "loss:", res.loss, "finite-difference error below 1e-6:", res.max_fd_error < 0.000001);
 }

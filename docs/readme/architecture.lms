@@ -12,7 +12,7 @@ scene.rect(60.0, 192.0, 1080.0, 132.0, ${panel});
 scene.rect(60.0, 366.0, 1080.0, 132.0, ${panel});
 scene.rect(60.0, 540.0, 1080.0, 132.0, ${panel});
 scene.text(600.0, 105.0, 70.0, "LMScript", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
-scene.text(600.0, 279.0, 70.0, "DSL schema", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
+scene.text(600.0, 279.0, 70.0, "lmcode schema", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
 scene.text(600.0, 453.0, 70.0, "lmtorch", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
 scene.text(600.0, 627.0, 66.0, "Tensor results", ${ink}).set_attr("text-anchor", "middle").set_attr("font-weight", "700");
 let a = scene.line(600.0, 158.0, 600.0, 182.0, ${accent}, 4.0); a.set_attr("marker-end", "arrow");
@@ -20,7 +20,5 @@ let b = scene.line(600.0, 332.0, 600.0, 356.0, ${accent}, 4.0); b.set_attr("mark
 let c = scene.line(600.0, 506.0, 600.0, 530.0, ${accent}, 4.0); c.set_attr("marker-end", "arrow");
 scene.render_png(${PNG}, 1200, 720, 1);
 end _lmcode_
-host = "build/readme-architecture-" + theme + ".dslb";
-savedsl(p, host);
-r = system ${dsl_cli(p)} --lmcode ${host};
-if (r.code != 0) { println(str(r.stderr)); exit(r.code); }
+r = run_lmcode(p);
+if (!r.ok) { println(f"lmcode readme architecture failed {r.phase} {r.code}: {r.message}"); exit(1); }

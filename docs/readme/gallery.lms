@@ -14,15 +14,13 @@ let grad = x.grad();
 out.check(grad.allclose(x.detach() * 2.0, 0.0, 0.0), "gradient must equal 2x");
 out.set("gradient", grad);
 end _lmcode_
-savedsl(sum_prog, "build/readme/sum.dslb");
-sum_run = system ${dsl_cli(sum_prog)} --lmcode build/readme/sum.dslb;
-if (sum_run.code != 0) { println(str(sum_run.stderr)); exit(sum_run.code); }
-SUM_TEXT = str(json_parse(sum_run.stdout).result.total);
+sum_run = run_lmcode(sum_prog);
+if (!sum_run.ok) { println(f"lmtorch {sum_run.phase} error {sum_run.code}: {sum_run.message}"); exit(1); }
+SUM_TEXT = str(sum_run.result.total);
 if (SUM_TEXT != "10") { println("unexpected sum result"); exit(1); }
-savedsl(grad_prog, "build/readme/gradient.dslb");
-grad_run = system ${dsl_cli(grad_prog)} --lmcode build/readme/gradient.dslb;
-if (grad_run.code != 0) { println(str(grad_run.stderr)); exit(grad_run.code); }
-grad_result = json_parse(grad_run.stdout).result.gradient;
+grad_run = run_lmcode(grad_prog);
+if (!grad_run.ok) { println(f"lmtorch {grad_run.phase} error {grad_run.code}: {grad_run.message}"); exit(1); }
+grad_result = grad_run.result.gradient;
 G0 = num(grad_result[0]); G1 = num(grad_result[1]); G2 = num(grad_result[2]);
 if (G0 != 2 || G1 != -4 || G2 != 6) { println("unexpected gradient result"); exit(1); }
 G0_TEXT = str(G0); G1_TEXT = str(G1); G2_TEXT = str(G2);
@@ -77,7 +75,5 @@ if (${mode} == "sum") {
 }
 scene.render_png(${PNG}, 1000, 420, 1);
 end _lmcode_
-host = "build/readme-gallery-" + mode + "-" + theme + ".dslb";
-savedsl(p, host);
-r = system ${dsl_cli(p)} --lmcode ${host};
-if (r.code != 0) { println(str(r.stderr)); exit(r.code); }
+r = run_lmcode(p);
+if (!r.ok) { println(f"lmcode readme gallery failed {r.phase} {r.code}: {r.message}"); exit(1); }

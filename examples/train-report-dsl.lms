@@ -1,6 +1,6 @@
-# _lmcode_ version of train-report.lms: lmscript builds the 16-point dataset, ONE DSL program trains the seeded 2-8-1 MLP,
+# lmcode version of train-report.lms: lmscript builds the 16-point dataset, one program trains the seeded 2-8-1 MLP,
 # scores training and held-out points and computes the metrics with tensor ops, and lmscript writes a Markdown report
-# with a loss table and a text sparkline. The original lmapi recipe made 72 tool calls plus 5 calls to a chart/DOCX tool;
+# with a loss table and a text sparkline. The former recipe made 72 tool calls plus 5 calls to a chart/DOCX tool;
 # this one needs only lmtorch (no Python, no GUI or rendering code).
 # Run: lmscript examples/train-report-dsl.lms [run_dir] [steps] [lr] [seed]    (defaults artifacts/train-report-dsl 60 0.05 11)
 import "./lib/torchdsl.lms";
@@ -28,8 +28,8 @@ for (x1 in GRID) {
 TEST_X = [[-1.25, 1.25], [-0.25, 0.75], [-0.25, -0.75], [1.25, 0.25]];
 TEST_Y = [];
 for (p in TEST_X) { push(TEST_Y, [p[0] + 2 * p[1] - 0.5 * p[0] * p[1]]); }
-# ${} turns lmscript values into DSL literals: lists travel as JSON text, and the rate as an integer number of millionths
-# (an integral lmscript number becomes a DSL int, so a float-valued parameter is passed scaled).
+# ${} turns lmscript values into lmcode literals: lists travel as JSON text, and the rate as an integer number of millionths
+# (an integral lmscript number becomes an lmcode int, so a float-valued parameter is passed scaled).
 X_JSON = json_stringify(X_VALUES);
 Y_JSON = json_stringify(Y_VALUES);
 TX_JSON = json_stringify(TEST_X);
@@ -85,7 +85,7 @@ out.set("engine", torch.version()).set("losses", losses).set("first_loss", losse
   .set("heldout_pred", held.flatten()).set("heldout_mse", held.mse_loss(ty).item());
 end _lmcode_
 
-res = torchdsl.run_block(report, path_join(RUN, "train-report.dslb"));
+res = torchdsl.run_block(report);
 if (res == null) { exit(0); }
 
 fn sparkline(values) {

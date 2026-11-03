@@ -1,46 +1,17 @@
 package torchdsl;
-# Shared plumbing for the _lmcode_ examples. Every block is `_lmcode_ cli="lmtorch" install="github:lmctl-ai/lmtorch@TAG"`:
-# lmscript takes the schema from `lmtorch --lmcode-schema --json` (lmtorch on PATH, else that release, downloaded once into
-# lmscript's tool cache and checked against GitHub's SHA-256 digest), compiles the block into bytecode (savedsl), and
-# dsl_cli(prog) is the argv prefix of that exact binary. This file wraps the second step: running the bytecode.
-
-# Run one or more bytecode files, in order, in ONE lmtorch process (host state such as the out results is shared; DSL
-# locals are per file). prog is any of the blocks: they all name the same binary. Returns the decoded result line
-# {ok, result} or {ok: false, phase, code, message[, line, column]}. Returns null in the dry preflight, where system()
-# is simulated and nothing runs.
-fn try_run(prog, files) {
-  exe = dsl_cli(prog);
-  r = system ${exe} --lmcode ${files};
-  if (r.get("dry", false)) {
-    return null;
-  }
-  if (r.stderr != "") {
-    for (line in lines(trim(r.stderr))) {
-      println("  | " + line);
-    }
-  }
-  if (trim(r.stdout) == "") {
-    return {ok: false, phase: "launch", code: "NO_RESULT", message: f"{join(exe, ' ')} exited {r.code} without a result line"};
-  }
-  return json_parse(trim(r.stdout));
-}
-
-# Like try_run, but a failure prints the host's message and exits 1; success returns the result object.
-fn run(prog, files) {
-  res = try_run(prog, files);
-  if (res == null) {
-    return null;
-  }
+# Shared lmcode invocation handling for the examples. lmscript attaches the native host to each program, and run_lmcode
+# supplies manifest v1, launches the host and decodes its terminal return frame.
+fn run(program_or_builder) {
+  res = run_lmcode(program_or_builder);
+  if (res.get("dry", false)) { return null; }
   if (!res.ok) {
-    where = res.has("line") ? f" (dsl line {res.line})" : "";
+    where = res.has("line") ? f" (lmcode line {res.line})" : "";
     println(f"lmtorch {res.phase} error {res.code}{where}: {res.message}");
     exit(1);
   }
   return res.result;
 }
 
-# Compile-and-run in one call: write the block's bytecode to path, then run it.
-fn run_block(prog, path) {
-  savedsl(prog, path);
-  return run(prog, [path]);
+fn run_block(program) {
+  return run(program);
 }

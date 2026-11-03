@@ -19,7 +19,6 @@ let boundary = model.forward(query).argmax(1);
 out.set("points", points).set("labels", labels).set("boundary", boundary);
 end _lmcode_
 
-savedsl(p, "plot-points.dslb");
-r = system ${dsl_cli(p)} --lmcode plot-points.dslb;
-if (r.code != 0) { println(str(r.stderr)); exit(r.code); }
-println(json_stringify(json_parse(r.stdout).result));
+r = run_lmcode(p);
+if (!r.ok) { println(f"lmtorch {r.phase} error {r.code}: {r.message}"); exit(1); }
+println(json_stringify(r.result));
