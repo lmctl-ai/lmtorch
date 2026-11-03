@@ -43,8 +43,8 @@ executables: linux-x64 222 MB, linux-arm64 185 MB, macos-x64 224 MB, macos-arm64
   made libtorch_cpu reference LAPACK symbols (`zunmqr_`, `cblas_sdot`, ...). Linux had been BLAS-free only because the
   runners have no system BLAS. Do not also disable the LAPACK lookup: configure then dies with `Unknown CMake command
   "CHECK_FUNCTION_EXISTS"` (FindLAPACK is what includes it); FindLAPACK only accepts a LAPACK matching the BLAS found.
-- **macOS** (AppleClang from Xcode 16): `CMAKE_OSX_DEPLOYMENT_TARGET` 13.0 for libtorch (`MACOSX_DEPLOYMENT_TARGET`,
-  default 13.0) and lmtorch (CMakeLists default), so the floor is macOS 13 Ventura (`otool -l`: minos 13.0). Link:
+- **macOS** (AppleClang from Xcode 16): `CMAKE_OSX_DEPLOYMENT_TARGET` 13.3 for libtorch (`MACOSX_DEPLOYMENT_TARGET`,
+  default 13.3) and lmtorch (CMakeLists default), so the floor is macOS 13 Ventura (`otool -l`: minos 13.3). Link:
   `-Wl,-force_load,<lib>` for torch/torch_cpu/c10, the other archives plain (ld64 rescans archives; no groups). Only
   `/usr/lib/libc++.1.dylib` and `/usr/lib/libSystem.B.dylib` are imported (test.sh gate: `otool -L`). nlohmann-json from
   Homebrew (header-only). x64: PyTorch publishes no macOS x86_64 wheel since 2.2, so the oracles are skipped there (29

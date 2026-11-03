@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
-# macOS floor: the release binary and the static libtorch it links are both built for this deployment target.
-set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
+# macOS floor: libc++ floating std::to_chars in the pinned lmcode SDK requires macOS 13.3; libtorch and lmtorch share it.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "Minimum macOS version")
 # Windows: the static MSVC runtime (/MT) in every target, matching scripts/build-libtorch.sh, so lmtorch.exe needs no
 # Visual C++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "MSVC runtime library")

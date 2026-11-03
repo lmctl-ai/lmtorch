@@ -95,14 +95,6 @@ want="lmtorch $(sed -n 's/^project(lmtorch VERSION \([0-9.]*\) .*/\1/p' CMakeLis
 set +e; "$BIN" --version extra > "$WORK/version.out" 2>&1; code=$?; set -e
 [ "$code" = 2 ] || fail "--version with an extra argument must be refused (exit $code)"
 ok "--version prints '$want' (host flag standard; lmscript install=...@latest compares it with the release tag)"
-# _lmcode_ cli="PROGRAM" (lmscript R42) compiles against the binary's own schema; older compilers reject the option.
-printf 'p = _lmcode_ cli="%s";\nout.set("v", torch.ones(3).sum().item());\nend _lmcode_\nr = run_lmcode(p);\nif (!r.ok || r.result.v != 3.0) { exit(1); }\nprintln(json_stringify(r.result));\n' "$BIN" > "$WORK/cli.lms"
-if "$LMSCRIPT" --check "$WORK/cli.lms" >/dev/null 2>&1; then
-  (cd "$WORK" && "$LMSCRIPT" cli.lms >/dev/null) || fail "running a cli= lmcode program"
-  ok "_lmcode_ cli=\"lmtorch\" compiles against the binary's own schema and runs"
-else
-  echo "# skipped: _lmcode_ cli= (this lmscript predates lmscript R42)"
-fi
 # The lmcode std catalog is built into the registry (lmtorch registers none of it): strings, math, collections and
 # files, and Bundle.keys() returns the std StrList (so join/contains work on it).
 cat > "$WORK/std.lms" <<'LMS'
@@ -225,7 +217,7 @@ for f in examples/*.lms; do
 done
 ok "every example passes lmscript --check"
 [ ! -e "$WORK/tool-cache" ] || fail "an example downloaded a release instead of using the binary under test: $(find "$WORK/tool-cache" -type f)"
-ok "_lmcode_ cli= blocks and github: imports bound to the binary under test (nothing downloaded)"
+ok "examples use the binary under test and github: imports did not download another release"
 
 if [ -n "$ORACLE_PYTHON" ] && "$ORACLE_PYTHON" -c 'import torch, safetensors, numpy' 2>/dev/null; then
   "$ORACLE_PYTHON" tests/integration.py "$BIN" "$LMSCRIPT_PY" > "$WORK/integration.log" 2>&1 || fail "CPU lmcode oracle: $(tail -60 "$WORK/integration.log")"

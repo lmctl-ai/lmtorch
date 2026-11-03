@@ -4,7 +4,7 @@
 # Defaults keep the multi-hour build outside the repository so `rm -rf build` never discards it:
 #   LIBTORCH_SRC=~/.cache/lmtorch/pytorch-src  LIBTORCH_BUILD=~/.cache/lmtorch/libtorch-build
 #   LIBTORCH_PREFIX=~/.cache/lmtorch/libtorch-static  LIBTORCH_JOBS=3
-# Linux: GCC. macOS: AppleClang, deployment target MACOSX_DEPLOYMENT_TARGET (default 13.0, the release floor).
+# Linux: GCC. macOS: AppleClang, deployment target MACOSX_DEPLOYMENT_TARGET (default 13.3, the release floor).
 # Windows: MSVC from Git Bash inside a Visual Studio developer environment (libtorch does not support MinGW), with the
 # static runtime (/MT) so that nothing needs the Visual C++ redistributable.
 set -euo pipefail
@@ -22,7 +22,7 @@ case "$(uname -s)" in Darwin) OS=macos;; MINGW*|MSYS*|CYGWIN*) OS=windows;; *) O
 native() { if [ "$OS" = windows ]; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 PLATFORM_ARGS=()
 case "$OS" in
-  macos) PLATFORM_ARGS=(-DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}");;
+  macos) PLATFORM_ARGS=(-DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.3}");;
   windows) PLATFORM_ARGS=(-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DCAFFE2_USE_MSVC_STATIC_RUNTIME=ON);;
 esac

@@ -4,7 +4,7 @@ name: CI
 #   release  static CPU-only libtorch 2.9.1 built from source by scripts/build-libtorch.sh (cached per runner, lock and
 #            script), linked whole-archive into one self-contained executable:
 #              linux-x64, linux-arm64   GCC; libstdc++/libgcc static, glibc shared (Ubuntu 22.04 runners: glibc >= 2.35)
-#              macos-arm64, macos-x64   AppleClang; only libc++ and libSystem dynamic (deployment target macOS 13.0)
+#              macos-arm64, macos-x64   AppleClang; only libc++ and libSystem dynamic (deployment target macOS 13.3; SDK floating to_chars requires 13.3)
 #              windows-x64              MSVC; static runtime (/MT), only Windows system DLLs
 #   dev      (Linux) against the PyTorch wheel's shared libtorch (fast)
 # A v* tag publishes every platform's executable, archive and checksum as a GitHub Release.
@@ -73,7 +73,7 @@ jobs:
       run:
         shell: bash
     env:
-      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      MACOSX_DEPLOYMENT_TARGET: '13.3'
     steps:
       - name: Git settings (Windows)
         if: runner.os == 'Windows'
