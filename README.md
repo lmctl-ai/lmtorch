@@ -84,6 +84,11 @@ lmctl autorun https://lmctl.com/tools/lmtorch/lmtorch_solo.lms
 
 Build the native host with `scripts/build-native.sh`; run the examples and checks with `./test.sh`. Release builds and tests cover Linux, macOS, and Windows in [GitHub Actions](https://github.com/lmctl-ai/lmtorch/actions/workflows/ci.yml).
 
+## Experimental browser core
+
+The separate [lite target](lite/README.md) builds tensors and autograd to WebAssembly without libtorch.
+It shares the lmcode schema and VM, and is checked against every example recipe. The native libtorch executable remains the reference.
+
 ## Third-party notices
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled components and their licenses.

@@ -1,0 +1,247 @@
+{
+  "helpers": [
+    "examples/lib/torchdsl.lms"
+  ],
+  "recipes": [
+    {
+      "source": "examples/autograd-gradient-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 5.3978806608356535,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.7027012831531465,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/checkpoint-resume-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 9.468478847760707,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 7.027210631873459,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/classify-moons-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 13.136157382279634,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 8.135091134812683,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/cnn-bars-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 7.798741844017059,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 8.822855162899941,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/grad-check-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 7.909064730163664,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 3.742906160186976,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/grad-check.lms",
+      "runs": {
+        "native": {
+          "seconds": 3.7408769549801946,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.3243957427330315,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/install-and-run-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 3.2395451930351555,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.176038492936641,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/lr-sweep-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 5.860990258865058,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 5.551984787918627,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/mlp-train-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 2.131826270837337,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.429143884219229,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/mlp-train.lms",
+      "runs": {
+        "native": {
+          "seconds": 3.9234144650399685,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.4114046157337725,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/regression-csv-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 4.45260546496138,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 5.002027559094131,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/tensor-chain-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 5.46479307487607,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.5587674118578434,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/tensor-chain.lms",
+      "runs": {
+        "native": {
+          "seconds": 4.47588373767212,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.2360591758042574,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/tensor-sum-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 3.996746236924082,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 2.0544050447642803,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    },
+    {
+      "source": "examples/train-report-dsl.lms",
+      "runs": {
+        "native": {
+          "seconds": 3.450150494929403,
+          "exit": 0
+        },
+        "wasm": {
+          "seconds": 3.4914397010579705,
+          "exit": 0
+        }
+      },
+      "parity": "pass"
+    }
+  ],
+  "native_reference": {
+    "version": "lmtorch 0.5.56",
+    "sha256": "0c6b40821ecd349039d368cf934692b9886d8e838959e1312a70f73afdfb60f2"
+  },
+  "source_sha256": {
+    "lite/tensor.hpp": "2ab3f6d3b52a5818dc29aa717abef53962d190fdcfd5cbc131efb5f5d2f149a4",
+    "lite/bindings.hpp": "ef0bb3dfb7d48cb1733aae474da245b287616d1fad1c454b0b5787b139c9ca03",
+    "lite/README.md": "b0be1d49b17a5e1e719fb275f3f533f48d2f2ddc64a96b21b47b8654c2d45b80",
+    "lite/CMakeLists.txt": "258f22e74b4b4ed686dd142c25f7c077b451efade4b572144e34f7c4d9d28913",
+    "lite/build.sh": "1d544dd281b8c6c484e32d44d6b1bd29652a5fe6f04f5e174a5b7e0345af9f46",
+    "lite/wasm-cli.cjs": "b6a6e7baa1ee228df571f496b33c284ea851292ab1d48ce1b346b8396b50a731",
+    "lite/host.cpp": "ac42fc0c63cf38ba57905fb8063a81a7ba7d06dd296249713f64a7e0478a2372",
+    "schema/lmtorch.dsl.json": "113c31ee84e2f94c0a4851b6a22cf93e51952e2154a64d7ada9f0063f7679701",
+    "examples/checkpoint-resume-dsl.lms": "5578565adb5d3e775b8345efc128aace743e1385c9d26b99cf30761725061545",
+    "examples/autograd-gradient-dsl.lms": "04d210b5a16cd556128f0e569f6b48c01eede22b31526667a8189574c46f9886",
+    "examples/mlp-train-dsl.lms": "aa77d91a8d9574ce17712148420298928746f7b35a0aae17a6da14195140f28c",
+    "examples/mlp-train.lms": "aa77d91a8d9574ce17712148420298928746f7b35a0aae17a6da14195140f28c",
+    "examples/train-report-dsl.lms": "04c13d23f5f687e1f33b979a4f3106e2e0ad72c515de3c59549ab77a0b8a5e44",
+    "examples/tensor-chain-dsl.lms": "8409f89f975e79cabde842e7c45a7b49adfa4174d8565e8c1a2edd798bb5f32b",
+    "examples/install-and-run-dsl.lms": "70aa49f27af030fdf3b1f0d4728d62b4a0e804eefa286799988f6f47c0364881",
+    "examples/cnn-bars-dsl.lms": "44d0af4b539a56e30028e4d0bcd772461467715b0a2c0c6e281d9f73fa670d76",
+    "examples/lr-sweep-dsl.lms": "78dbfe36eff656226e8a1643bf286e3f2696b82968a757c9e8c260b1ea893c7c",
+    "examples/tensor-chain.lms": "e2d2fee42bbc16a87efc90231275e6859cef60d640e3cd258804281c1bc3abfe",
+    "examples/grad-check.lms": "2e6028e00d896ba6cbba3e691ef15f80e14729b925e65256819acd30a9652511",
+    "examples/tensor-sum-dsl.lms": "62c61c3db949218f9bcc1b2e673ff6c55334b9d5a677f0cd8b6c5b71522f456b",
+    "examples/classify-moons-dsl.lms": "4b903bb95dbcf9048da5b5d6b9a0dd0d7cbcaacd17b3cab29476d55373cc2ccc",
+    "examples/regression-csv-dsl.lms": "3740d75ef3994d064a2a6770f5e1b24a63a3a4fccda8afe500be2fa6fcb5b88f",
+    "examples/grad-check-dsl.lms": "4ca830c4b29c0c8344d8346518b58121bdee42402f254b387f81a076b33504b5"
+  },
+  "note": "lr-sweep largest finite candidate changed from 0.2 to 0.1 to avoid roundoff-amplifying high-momentum refinement; parity tolerances unchanged."
+}

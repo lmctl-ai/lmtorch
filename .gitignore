@@ -4,3 +4,5 @@ build/
 .tmp/
 artifacts/
 build-dev/
+
+build-lite/
