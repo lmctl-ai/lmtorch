@@ -6,3 +6,5 @@ artifacts/
 build-dev/
 
 build-lite/
+
+__pycache__/
