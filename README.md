@@ -13,6 +13,8 @@ Run CPU tensors, automatic differentiation, and small neural networks from LMScr
 [![Latest release](https://img.shields.io/github/v/release/lmctl-ai/lmtorch?label=release)](https://github.com/lmctl-ai/lmtorch/releases/latest)
 [![Build and test](https://github.com/lmctl-ai/lmtorch/actions/workflows/ci.yml/badge.svg)](https://github.com/lmctl-ai/lmtorch/actions/workflows/ci.yml)
 
+**Documentation:** [lmctl.com/tools/lmtorch](https://www.lmctl.com/tools/lmtorch/) · [skill](https://www.lmctl.com/tools/lmtorch/skill.html) · [guide](https://www.lmctl.com/tools/lmtorch/guide.html) · [reference](https://www.lmctl.com/tools/lmtorch/reference.html)
+
 ## How it works
 
 <picture>
